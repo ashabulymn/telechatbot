@@ -7,3 +7,4 @@ aiosqlite>=0.21,<1
 python-multipart>=0.0.20,<1
 pypdf>=6,<7
 python-docx>=1.2,<2
+cryptography>=46,<47
