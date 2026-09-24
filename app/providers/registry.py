@@ -2,10 +2,12 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+
 from typing import Any
 
 from .base import AIProvider
 from .openai_compatible import OpenAICompatibleProvider
+from .registry_types import ProviderRuntime
 from .errors import ProviderConfigurationError
 from ..config import get_settings
 
@@ -78,14 +80,21 @@ class ProviderRegistry:
     def names(self): return list(self._profiles.keys())
     def get(self,name): return self._profiles.get(name)
 
-    def provider(self,name=None) -> AIProvider:
+    def provider(self,name=None,base_url_override=None,api_key_override=None) -> AIProvider:
         selected=name or self.settings.ai_default_provider
         profile=self._profiles.get(selected) or self._profiles.get("default") or next(iter(self._profiles.values()), None)
         if not profile:
             raise ProviderConfigurationError(f"Provider '{selected}' tidak ditemukan.")
         if profile.protocol != "openai_chat_completions":
             raise ProviderConfigurationError(f"Protocol provider '{profile.protocol}' belum didukung.")
-        return OpenAICompatibleProvider(profile)
+        runtime=ProviderRuntime(
+            name=profile.name,
+            base_url=base_url_override or profile.base_url,
+            api_key=api_key_override or profile.api_key,
+            default_model=profile.default_model,
+            extra_body=profile.extra_body,
+        )
+        return OpenAICompatibleProvider(runtime)
 
     def profile(self,name=None):
         selected=name or self.settings.ai_default_provider
