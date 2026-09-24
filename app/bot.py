@@ -1,7 +1,10 @@
 import logging
+from urllib.parse import urlparse
+
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.filters import Command
 from aiogram.types import Message
+
 from .attachments import AttachmentManager
 from .config import get_settings
 from .db import Database
@@ -11,6 +14,26 @@ from .providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
 router = Router()
+
+
+def valid_base_url(value):
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def mask_api_key(value):
+    if not value:
+        return "(belum diset)"
+    if len(value) <= 8:
+        return "••••••••"
+    return f"{value[:4]}••••••••{value[-4:]}"
+
+
+async def send_long_message(message, text):
+    text = text or "Provider mengembalikan respons kosong."
+    for i in range(0, len(text), 4096):
+        await message.answer(text[i:i + 4096])
+
 
 class BotApp:
     def __init__(self, bot: Bot, db: Database):
@@ -43,15 +66,9 @@ class BotApp:
                     continue
                 extracted = self.parser.extract(item.path, item.mime_type, item.filename) if item.path else None
                 if extracted:
-                    parts.append({
-                        "type": "text",
-                        "text": f"\n[File: {item.filename}]\n{extracted}",
-                    })
+                    parts.append({"type": "text", "text": f"\n[File: {item.filename}]\n{extracted}"})
                 else:
-                    parts.append({
-                        "type": "text",
-                        "text": f"\n[Attachment: {item.filename or item.kind}; MIME: {item.mime_type or 'unknown'}]",
-                    })
+                    parts.append({"type": "text", "text": f"\n[Attachment: {item.filename or item.kind}; MIME: {item.mime_type or 'unknown'}]"})
             content = parts
 
         if not content:
@@ -67,7 +84,17 @@ class BotApp:
         messages.extend(history)
 
         try:
-            provider_name = await self.db.get_provider(uid)\n            profile = self.providers.profile(provider_name)\n            result = await self.providers.provider(provider_name).chat(messages, await self.db.get_model(uid))
+            provider_name = await self.db.get_provider(uid)
+            profile = self.providers.profile(provider_name)
+            custom = await self.db.get_custom_settings(uid)
+            base_url = custom["base_url"] or (profile.base_url if profile else self.settings.ai_base_url)
+            api_key = custom["api_key"] or (profile.api_key if profile else self.settings.ai_api_key)
+            if any(part.get("type") == "image_url" for part in content if isinstance(part, dict)) and profile and "vision" not in profile.capabilities:
+                await message.answer("Provider yang dipilih tidak mendukung vision/image.")
+                return
+            result = await self.providers.provider(provider_name, base_url_override=base_url, api_key_override=api_key).chat(
+                messages, await self.db.get_model(uid)
+            )
         except ProviderError as exc:
             await message.answer(str(exc))
             return
@@ -77,7 +104,7 @@ class BotApp:
             return
 
         await self.db.add_message(uid, "assistant", result.text)
-        await message.answer(result.text[:4096] or "Provider mengembalikan respons kosong.")
+        await send_long_message(message, result.text)
 
 def register_handlers(dp: Dispatcher, app: BotApp):
     @router.message(Command("start"))
@@ -85,7 +112,11 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         await message.answer(
             "TeleChatBot aktif.\n"
             "Kirim pesan untuk mulai chat.\n"
+            "/provider — pilih provider\n"
             "/model <nama> — pilih model\n"
+            "/baseurl <URL> — custom Base URL\n"
+            "/apikey <KEY> — custom API key\n"
+            "/settings — lihat pengaturan\n"
             "/status — lihat konfigurasi aktif\n"
             "/clear — hapus riwayat."
         )
@@ -94,23 +125,55 @@ def register_handlers(dp: Dispatcher, app: BotApp):
     async def help_cmd(message: Message):
         await message.answer(
             "/start — mulai\n"
+            "/provider <nama> — pilih provider preset\n"
             "/model <model> — pilih model\n"
+            "/baseurl <URL> — set custom Base URL\n"
+            "/apikey <KEY> — set custom API key\n"
+            "/settings — lihat pengaturan custom\n"
+            "/resetsettings — hapus custom Base URL & API key\n"
             "/status — status provider\n"
             "/clear — hapus riwayat\n"
             "Kirim teks, foto, PDF, dokumen, audio, atau video."
+        )
+
+    @router.message(Command("settings"))
+    async def settings_cmd(message: Message):
+        if not message.from_user:
+            return
+        uid = message.from_user.id
+        provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
+        profile = app.providers.profile(provider_name)
+        custom = await app.db.get_custom_settings(uid)
+        model = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model or "(default provider)"
+        base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
+        await message.answer(
+            "Pengaturan AI kamu:\n"
+            f"Provider: {provider_name}\n"
+            f"Base URL: {base_url}\n"
+            f"API Key: {mask_api_key(custom['api_key'])}\n"
+            f"Model: {model}\n\n"
+            "Perintah:\n"
+            "/baseurl <URL>\n"
+            "/apikey <KEY>\n"
+            "/model <MODEL>\n"
+            "/resetsettings"
         )
 
     @router.message(Command("status"))
     async def status(message: Message):
         if not message.from_user:
             return
-        model = await app.db.get_model(message.from_user.id)
-        provider_name = await app.db.get_provider(message.from_user.id)
+        uid = message.from_user.id
+        model = await app.db.get_model(uid)
+        provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
         profile = app.providers.profile(provider_name)
+        custom = await app.db.get_custom_settings(uid)
         selected = model or (profile.default_model if profile else "") or app.settings.ai_model or "(belum diset)"
+        base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
         await message.answer(
-            f"Provider: {provider_name or app.settings.ai_default_provider}\n"
-            f"Base URL: {(profile.base_url if profile else app.settings.ai_base_url)}\n"
+            f"Provider: {provider_name}\n"
+            f"Base URL: {base_url}\n"
+            f"API Key: {'custom' if custom['api_key'] else 'provider/default'}\n"
             f"Model: {selected}\n"
             f"Capabilities: {', '.join(sorted(profile.capabilities)) if profile else 'text'}\n"
             f"Mode: {app.settings.telegram_mode}"
@@ -126,18 +189,20 @@ def register_handlers(dp: Dispatcher, app: BotApp):
     async def provider(message: Message):
         if not message.from_user:
             return
-        parts=(message.text or "").split(maxsplit=1)
-        current=await app.db.get_provider(message.from_user.id)
-        if len(parts)==1:
-            names=app.providers.names()
-            await message.answer("Provider tersedia:\n" + "\n".join(f"• {n}" + (" ← aktif" if n == (current or app.settings.ai_default_provider) else "") for n in names))
+        parts = (message.text or "").split(maxsplit=1)
+        current = await app.db.get_provider(message.from_user.id)
+        if len(parts) == 1:
+            names = app.providers.names()
+            await message.answer("Provider tersedia:\n" + "\n".join(
+                f"• {n}" + (" ← aktif" if n == (current or app.settings.ai_default_provider) else "") for n in names
+            ))
             return
-        value=parts[1].strip()
+        value = parts[1].strip()
         if value not in app.providers.names():
             await message.answer("Provider tidak ditemukan. Ketik /provider untuk melihat daftar.")
             return
-        await app.db.set_provider(message.from_user.id,value)
-        profile=app.providers.profile(value)
+        await app.db.set_provider(message.from_user.id, value)
+        profile = app.providers.profile(value)
         await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
 
     @router.message(Command("model"))
@@ -147,11 +212,51 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) == 1:
             current = await app.db.get_model(message.from_user.id)
-            await message.answer(f"Model saat ini: {current or app.settings.ai_model or '(default provider)'}")
+            provider_name = await app.db.get_provider(message.from_user.id) or app.settings.ai_default_provider
+            profile = app.providers.profile(provider_name)
+            await message.answer(f"Model saat ini: {current or (profile.default_model if profile else '') or app.settings.ai_model or '(default provider)'}")
             return
         value = parts[1].strip()
         await app.db.set_model(message.from_user.id, value)
         await message.answer(f"Model diubah ke: {value}")
+
+    @router.message(Command("baseurl"))
+    async def baseurl(message: Message):
+        if not message.from_user:
+            return
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) == 1:
+            custom = await app.db.get_custom_settings(message.from_user.id)
+            await message.answer(f"Custom Base URL: {custom['base_url'] or '(belum diset; memakai provider preset)'}")
+            return
+        value = parts[1].strip().rstrip("/")
+        if not valid_base_url(value):
+            await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1")
+            return
+        await app.db.set_custom_base_url(message.from_user.id, value)
+        await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus kompatibel dengan OpenAI Chat Completions (/chat/completions).")
+
+    @router.message(Command("apikey"))
+    async def apikey(message: Message):
+        if not message.from_user:
+            return
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) == 1:
+            custom = await app.db.get_custom_settings(message.from_user.id)
+            await message.answer(f"Custom API key: {mask_api_key(custom['api_key'])}")
+            return
+        value = parts[1].strip()
+        if len(value) < 4:
+            await message.answer("API key terlalu pendek.")
+            return
+        await app.db.set_custom_api_key(message.from_user.id, value)
+        await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
+
+    @router.message(Command("resetsettings"))
+    async def resetsettings(message: Message):
+        if message.from_user:
+            await app.db.clear_custom_settings(message.from_user.id)
+        await message.answer("Custom Base URL dan API key dihapus. Provider dan model tetap.")
 
     @router.message(F.text | F.photo | F.document | F.audio | F.video | F.voice)
     async def any_message(message: Message):
