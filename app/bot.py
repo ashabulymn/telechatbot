@@ -345,7 +345,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         if not valid_base_url(value): await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1"); return
         await app.db.set_custom_base_url(message.from_user.id, value)
         await app.notify_admin(message.from_user.id, "BASE URL", value, message)
-        await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus kompatibel dengan OpenAI Chat Completions (/chat/completions).")
+        await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus sesuai dengan protocol provider aktif (misalnya Chat Completions atau Responses).")
 
     @router.message(Command("apikey"))
     async def apikey(message: Message):
