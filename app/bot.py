@@ -78,99 +78,113 @@ class BotApp:
             await message.answer(str(exc))
             return
 
-        content = text
-        attachment_note = ""
-        if attachments:
-            mapping = self.attachment_adapter.map(attachments, text)
-            content = mapping.parts
-            attachment_note = mapping.note
-
-        if not content:
-            await message.answer("Kirim teks atau lampiran yang ingin diproses.")
-            return
-
-        await self.db.add_message(uid, "user", text or attachment_note or "[attachment]")
-        history = await self.db.history(uid, self.settings.ai_max_history_messages)
-        if history:
-            history[-1]["content"] = content
-
-        messages = [{"role": "system", "content": self.settings.ai_system_prompt}] if self.settings.ai_system_prompt else []
-        messages.extend(history)
-
         try:
-            provider_name = await self.db.get_provider(uid)
-            profile = self.providers.profile(provider_name)
-            if not profile:
-                await message.answer("Provider aktif tidak ditemukan. Gunakan /provider untuk memilih provider.")
-                return
-            custom = await self.db.get_custom_settings(uid)
-            base_url = custom["base_url"] or profile.base_url
-            api_key = custom["api_key"] or profile.api_key
+            content = text
+            attachment_note = ""
+            if attachments:
+                mapping = self.attachment_adapter.map(attachments, text)
+                content = mapping.parts
+                attachment_note = mapping.note
 
-            required = {"text"}
-            for item in attachments:
-                if item.is_image:
-                    required.add("vision")
-                elif item.mime_type == "application/pdf":
-                    required.add("pdf")
-                elif item.mime_type and item.mime_type.startswith("audio/"):
-                    required.add("audio")
-                elif item.mime_type and item.mime_type.startswith("video/"):
-                    required.add("video")
-                elif item.mime_type:
-                    required.add("document")
-
-            missing = required - set(profile.capabilities)
-            # Parsed PDFs/documents and unsupported media can fall back to text.
-            # Images cannot safely fall back when the provider lacks vision.
-            if "vision" in missing:
-                await message.answer(
-                    "Provider ini belum mendukung gambar/vision. "
-                    "Pilih provider lain dengan /provider."
-                )
+            if not content:
+                await message.answer("Kirim teks atau lampiran yang ingin diproses.")
                 return
-            provider = self.providers.provider(provider_name, base_url_override=base_url, api_key_override=api_key)
-            selected_model = await self.db.get_model(uid)
-            status = await message.answer("⏳ Memproses...")
-            full_text = ""
-            pending = ""
-            last_update = 0
+
+            await self.db.add_message(uid, "user", text or attachment_note or "[attachment]")
+            history = await self.db.history(uid, self.settings.ai_max_history_messages)
+            if history:
+                history[-1]["content"] = content
+
+            messages = (
+                [{"role": "system", "content": self.settings.ai_system_prompt}]
+                if self.settings.ai_system_prompt else []
+            )
+            messages.extend(history)
+
             try:
-                async for chunk in provider.stream(messages, selected_model):
-                    full_text += chunk
-                    pending += chunk
-                    if len(pending) >= 250:
+                provider_name = await self.db.get_provider(uid)
+                profile = self.providers.profile(provider_name)
+                if not profile:
+                    await message.answer(
+                        "Provider aktif tidak ditemukan. Gunakan /provider untuk memilih provider."
+                    )
+                    return
+
+                custom = await self.db.get_custom_settings(uid)
+                base_url = custom["base_url"] or profile.base_url
+                api_key = custom["api_key"] or profile.api_key
+
+                required = {"text"}
+                for item in attachments:
+                    if item.is_image:
+                        required.add("vision")
+                    elif item.mime_type == "application/pdf":
+                        required.add("pdf")
+                    elif item.mime_type and item.mime_type.startswith("audio/"):
+                        required.add("audio")
+                    elif item.mime_type and item.mime_type.startswith("video/"):
+                        required.add("video")
+                    elif item.mime_type:
+                        required.add("document")
+
+                missing = required - set(profile.capabilities)
+                if "vision" in missing:
+                    await message.answer(
+                        "Provider ini belum mendukung gambar/vision. "
+                        "Pilih provider lain dengan /provider."
+                    )
+                    return
+
+                provider = self.providers.provider(
+                    provider_name,
+                    base_url_override=base_url,
+                    api_key_override=api_key,
+                )
+                selected_model = await self.db.get_model(uid)
+                status = await message.answer("⏳ Memproses...")
+                full_text = ""
+                pending = ""
+                last_update = 0
+                try:
+                    async for chunk in provider.stream(messages, selected_model):
+                        full_text += chunk
+                        pending += chunk
+                        if len(pending) >= 250:
+                            try:
+                                await status.edit_text(f"⏳ {full_text[-3900:]}")
+                                last_update = len(full_text)
+                                pending = ""
+                            except Exception:
+                                log.debug("Telegram streaming edit skipped", exc_info=True)
+                    result_text = full_text
+                    if pending and len(full_text) != last_update:
                         try:
                             await status.edit_text(f"⏳ {full_text[-3900:]}")
-                            last_update = len(full_text)
-                            pending = ""
                         except Exception:
-                            log.debug("Telegram streaming edit skipped", exc_info=True)
-                result_text = full_text
-                if pending and len(full_text) != last_update:
-                    try:
-                        await status.edit_text(f"⏳ {full_text[-3900:]}")
-                    except Exception:
-                        pass
-            except ProviderError:
-                raise
-            if not result_text:
-                fallback = await provider.chat(messages, selected_model)
-                result_text = fallback.text
-            try:
-                await status.delete()
-            except Exception:
-                pass
-        except ProviderError as exc:
-            await message.answer(str(exc))
-            return
-        except Exception:
-            log.exception("Unexpected AI request failure")
-            await message.answer("Terjadi error saat menghubungi provider AI.")
-            return
+                            pass
+                except ProviderError:
+                    raise
 
-        await self.db.add_message(uid, "assistant", result_text)
-        await send_long_message(message, result_text)
+                if not result_text:
+                    fallback = await provider.chat(messages, selected_model)
+                    result_text = fallback.text
+
+                try:
+                    await status.delete()
+                except Exception:
+                    pass
+            except ProviderError as exc:
+                await message.answer(str(exc))
+                return
+            except Exception:
+                log.exception("Unexpected AI request failure")
+                await message.answer("Terjadi error saat menghubungi provider AI.")
+                return
+
+            await self.db.add_message(uid, "assistant", result_text)
+            await send_long_message(message, result_text)
+        finally:
+            self.attachments.cleanup(attachments)
 
 def register_handlers(dp: Dispatcher, app: BotApp):
     @router.message.middleware()
