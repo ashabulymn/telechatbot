@@ -11,7 +11,10 @@ async def lifespan(app:FastAPI):
     await db.init()
     if s.telegram_mode.lower()=="webhook":
         if not s.telegram_webhook_url: raise RuntimeError("TELEGRAM_WEBHOOK_URL is required in webhook mode")
-        await bot.set_webhook(s.telegram_webhook_url,secret_token=s.telegram_webhook_secret or None)
+        webhook_url = s.telegram_webhook_url.rstrip("/")
+        if not webhook_url.endswith("/telegram/webhook"):
+            webhook_url += "/telegram/webhook"
+        await bot.set_webhook(webhook_url,secret_token=s.telegram_webhook_secret or None)
     yield
     if s.telegram_mode.lower()=="webhook": await bot.delete_webhook()
     await bot.session.close()
