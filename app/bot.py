@@ -122,8 +122,30 @@ class BotApp:
                         )
                     except Exception:
                         pass
-                mapping = await provider.prepare_attachments(attachments, text)
-                content = mapping.parts or text
+                transcriptions = []
+                remaining_attachments = []
+                for item in attachments:
+                    if item.kind == "audio":
+                        try:
+                            transcript = await provider.transcribe_attachment(item)
+                        except ProviderError:
+                            transcript = None
+                        if transcript:
+                            transcriptions.append(
+                                f"[Transkripsi {item.filename or 'audio'}]\n{transcript}"
+                            )
+                            continue
+                    remaining_attachments.append(item)
+
+                prepared_text = text
+                if transcriptions:
+                    prepared_text = "\n\n".join(
+                        part for part in [text, *transcriptions] if part
+                    )
+                mapping = await provider.prepare_attachments(
+                    remaining_attachments, prepared_text
+                )
+                content = mapping.parts or prepared_text
                 attachment_note = mapping.note
                 await self.db.add_message(uid, "user", text or attachment_note or "[attachment]")
                 history = await self.db.history(uid, self.settings.ai_max_history_messages)
