@@ -87,6 +87,31 @@ class AnthropicMessagesProvider(AIProvider):
         }
         return self._url(), headers, payload
 
+    async def list_models(self) -> list[str]:
+        if not self.runtime.api_key:
+            raise ProviderConfigurationError("API key provider belum dikonfigurasi.")
+        base = self.runtime.base_url.strip().rstrip("/")
+        parsed = urlparse(base)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ProviderConfigurationError("Base URL provider tidak valid.")
+        url = base + ("/models" if base.endswith("/v1") else "/v1/models")
+        headers = {"x-api-key": self.runtime.api_key, "anthropic-version": self.API_VERSION}
+        try:
+            async with httpx.AsyncClient(timeout=self.settings.ai_timeout_seconds) as client:
+                response = await client.get(url, headers=headers)
+        except httpx.TimeoutException as exc:
+            raise ProviderError("Daftar model provider timeout.") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError("Provider model tidak dapat dihubungi.") from exc
+        if response.is_error:
+            raise self._http_error(response)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ProviderError("Provider model mengembalikan JSON yang tidak valid.") from exc
+        models = data.get("data") or []
+        return sorted({str(item["id"]) for item in models if isinstance(item, dict) and item.get("id")})
+
     async def chat(self, messages, model=None):
         url, headers, payload = self._request(messages, model)
         try:
