@@ -230,7 +230,7 @@ TELEGRAM_WEBHOOK_HOST=0.0.0.0
 TELEGRAM_WEBHOOK_PORT=8080
 ```
 
-Domain harus mengarah ke server dan reverse proxy harus meneruskan request ke port `8080`.
+Domain harus mengarah ke server dan reverse proxy harus meneruskan request ke port `8080`. Aplikasi otomatis memakai endpoint `/telegram/webhook`; jika nilai `TELEGRAM_WEBHOOK_URL` sudah berisi path tersebut, tidak akan ditambahkan lagi.
 
 ### 7. Attachment & FFmpeg
 
