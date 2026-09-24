@@ -35,7 +35,7 @@ def plan_attachment_routes(
             if provider.supports_transcription(item):
                 routes.append(AttachmentRoute(item, "transcribe", "provider requested transcription"))
             else:
-                routes.append(AttachmentRoute(item, "fallback", "transcription requested but unavailable"))
+                routes.append(AttachmentRoute(item, "disabled", "transcription requested but unavailable"))
             continue
 
         if item.kind in {"audio", "video"}:
@@ -52,6 +52,10 @@ def plan_attachment_routes(
 
         if provider.supports_native_upload(item):
             routes.append(AttachmentRoute(item, "native", "native provider upload available"))
+        elif provider.supports_transcription(item):
+            routes.append(AttachmentRoute(item, "transcribe", "media content requires transcription"))
+        elif item.kind in {"audio", "video"}:
+            routes.append(AttachmentRoute(item, "disabled", "no usable media processing route"))
         else:
             routes.append(AttachmentRoute(item, "fallback", "generic attachment mapping"))
 
@@ -63,7 +67,7 @@ def route_summary(routes: Iterable[AttachmentRoute]) -> str:
         "native": "native",
         "transcribe": "transkripsi",
         "fallback": "fallback",
-        "disabled": "nonaktif",
+        "disabled": "tidak tersedia",
     }
     lines = []
     for item in routes:
