@@ -95,7 +95,7 @@ Protocol yang tersedia saat ini:
 
 ### 3. 9Router
 
-TeleChatBot **sudah kompatibel dengan 9Router** melalui protocol `openai_chat_completions`. 9Router menyediakan endpoint OpenAI-compatible, sehingga tidak memerlukan adapter khusus di kode TeleChatBot. Dokumentasi 9Router mencantumkan Base URL cloud `https://9router.com/v1`, self-hosted `http://localhost:20128/v1`, serta model dengan pola seperti `cc/*`, `cx/*`, dan `glm/*`. citeturn0search1turn0search5
+TeleChatBot **sudah kompatibel dengan 9Router** melalui protocol `openai_chat_completions`. 9Router menyediakan endpoint OpenAI-compatible, sehingga tidak memerlukan adapter khusus di kode TeleChatBot. Dokumentasi 9Router mencantumkan Base URL cloud `https://9router.com/v1`, self-hosted `http://localhost:20128/v1`, serta model dengan pola seperti `cc/*`, `cx/*`, dan `glm/*`.
 
 Contoh cloud:
 
@@ -113,7 +113,7 @@ Setelah deploy, user dapat memakai:
 /status
 ```
 
-Untuk 9Router yang berjalan dalam Docker network yang sama, gunakan Base URL yang dapat dijangkau container TeleChatBot, misalnya `http://9router:20128/v1` bila nama service/container-nya `9router`. Jangan gunakan `localhost` dari dalam container TeleChatBot karena itu menunjuk ke container TeleChatBot sendiri. 9Router sendiri mendokumentasikan endpoint lokal pada port 20128. citeturn0search0turn0search5
+Untuk 9Router yang berjalan dalam Docker network yang sama, gunakan Base URL yang dapat dijangkau container TeleChatBot, misalnya `http://9router:20128/v1` bila nama service/container-nya `9router`. Jangan gunakan `localhost` dari dalam container TeleChatBot karena itu menunjuk ke container TeleChatBot sendiri. 9Router sendiri mendokumentasikan endpoint lokal pada port 20128.
 
 **Catatan attachment:** kompatibilitas OpenAI Chat Completions membuat chat teks dapat langsung dirouting. Kemampuan vision/attachment tetap bergantung pada model/provider yang dipilih di 9Router; jangan mengaktifkan capability yang tidak benar-benar tersedia. Untuk audio/video, konfigurasi di atas memakai `fallback`, bukan mengklaim endpoint transcription native 9Router sebagai bagian dari adapter Chat Completions TeleChatBot.
 
