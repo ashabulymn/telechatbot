@@ -91,6 +91,7 @@ class OpenAIResponsesProvider(AIProvider):
         notes = []
         warnings = []
         remote_file_ids = []
+        routing = []
         total = len(attachments)
 
         try:
@@ -101,6 +102,7 @@ class OpenAIResponsesProvider(AIProvider):
                     await progress(index, total, item, "preparing")
 
                 if mode == "disabled":
+                    routing.append(f"{filename}: disabled")
                     warnings.append(f"{filename}: mode attachment dinonaktifkan.")
                     if progress:
                         await progress(index, total, item, "failed")
@@ -118,6 +120,7 @@ class OpenAIResponsesProvider(AIProvider):
                             await progress(index, total, item, "failed")
                         continue
                     parts.append({"type": "image_url", "image_url": {"url": item.data_url()}})
+                    routing.append(f"{filename}: native")
                     notes.append(
                         f"[Image: {filename}; MIME: {item.mime_type}; size: {item.size} bytes]"
                     )
@@ -134,6 +137,7 @@ class OpenAIResponsesProvider(AIProvider):
                     except Exception as exc:
                         warning = f"{filename}: upload native gagal ({str(exc)[:180]}). Dipakai fallback."
                         warnings.append(warning)
+                        routing.append(f"{filename}: native → fallback")
                         if progress:
                             await progress(index, total, item, "fallback")
 
@@ -143,6 +147,7 @@ class OpenAIResponsesProvider(AIProvider):
                     notes.append(
                         f"[Native file: {filename}; MIME: {item.mime_type or 'unknown'}]"
                     )
+                    routing.append(f"{filename}: native")
                     if progress:
                         await progress(index, total, item, "ready")
                     continue
@@ -152,6 +157,7 @@ class OpenAIResponsesProvider(AIProvider):
                     parts.extend(fallback.parts)
                     notes.append(fallback.note)
                     warnings.extend(fallback.warnings)
+                    routing.append(f"{filename}: fallback")
                     if progress:
                         await progress(index, total, item, "ready")
                 except Exception as exc:
@@ -167,6 +173,7 @@ class OpenAIResponsesProvider(AIProvider):
                         parts=[],
                         note="",
                         remote_file_ids=list(remote_file_ids),
+                        routing=list(routing),
                     )
                 )
             raise
@@ -176,6 +183,7 @@ class OpenAIResponsesProvider(AIProvider):
             note="\n".join(notes),
             warnings=warnings,
             remote_file_ids=remote_file_ids,
+            routing=routing,
         )
 
     async def cleanup_attachments(self, mapping):
