@@ -1,10 +1,20 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, AsyncIterator
+
+
 @dataclass
 class ProviderResponse:
     text: str
-    raw: dict[str,Any] | None = None
+    raw: dict[str, Any] | None = None
+
+
 class AIProvider(ABC):
     @abstractmethod
-    async def chat(self,messages:list[dict],model:str|None=None)->ProviderResponse: raise NotImplementedError
+    async def chat(self, messages: list[dict], model: str | None = None) -> ProviderResponse:
+        raise NotImplementedError
+
+    async def stream(self, messages: list[dict], model: str | None = None) -> AsyncIterator[str]:
+        response = await self.chat(messages, model)
+        if response.text:
+            yield response.text
