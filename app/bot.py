@@ -76,6 +76,8 @@ class BotApp:
             await message.answer(str(exc))
             return
 
+        provider = None
+        mapping = None
         try:
             content = text
             attachment_note = ""
@@ -241,6 +243,11 @@ class BotApp:
             await self.db.add_message(uid, "assistant", result_text)
             await send_long_message(message, result_text)
         finally:
+            if provider is not None and mapping is not None:
+                try:
+                    await provider.cleanup_attachments(mapping)
+                except Exception:
+                    log.debug("Provider attachment cleanup skipped", exc_info=True)
             self.attachments.cleanup(attachments)
 
 def register_handlers(dp: Dispatcher, app: BotApp):
