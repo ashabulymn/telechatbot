@@ -10,6 +10,7 @@ from .config import get_settings
 from .db import Database
 from .file_parser import FileParser
 from .providers.registry import ProviderRegistry
+from .providers.attachments import AttachmentAdapter
 from .providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class BotApp:
         self.db = db
         self.attachments = AttachmentManager(bot)
         self.parser = FileParser(get_settings().attachment_max_prompt_chars)
+        self.attachment_adapter = AttachmentAdapter(self.parser)
         self.providers = ProviderRegistry()
         self.settings = get_settings()
 
@@ -79,21 +81,9 @@ class BotApp:
         content = text
         attachment_note = ""
         if attachments:
-            parts = []
-            if text:
-                parts.append({"type": "text", "text": text})
-            for item in attachments:
-                if item.is_image and item.data_url():
-                    parts.append({"type": "image_url", "image_url": {"url": item.data_url()}})
-                    attachment_note += f"\n[Image: {item.filename}; MIME: {item.mime_type}; size: {item.size} bytes]"
-                    continue
-                extracted = self.parser.extract(item.path, item.mime_type, item.filename) if item.path else None
-                if extracted:
-                    parts.append({"type": "text", "text": f"\n[File: {item.filename}; MIME: {item.mime_type or 'unknown'}]\n{extracted}"})
-                else:
-                    parts.append({"type": "text", "text": f"\n[Attachment: {item.filename or item.kind}; MIME: {item.mime_type or 'unknown'}; size: {item.size} bytes]"})
-                attachment_note += f"\n[Attachment: {item.filename or item.kind}; MIME: {item.mime_type or 'unknown'}; size: {item.size} bytes]"
-            content = parts
+            mapping = self.attachment_adapter.map(attachments, text)
+            content = mapping.parts
+            attachment_note = mapping.note
 
         if not content:
             await message.answer("Kirim teks atau lampiran yang ingin diproses.")
