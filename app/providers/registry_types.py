@@ -10,3 +10,5 @@ class ProviderRuntime:
     extra_body: dict[str, Any] = field(default_factory=dict)
     capabilities: frozenset[str] = field(default_factory=frozenset)
     attachment_modes: dict[str, str] = field(default_factory=dict)
+    model_capabilities: frozenset[str] = field(default_factory=frozenset)
+    model_capabilities_known: bool = False
