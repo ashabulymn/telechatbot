@@ -18,7 +18,9 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 - API keys are not stored in the setting-change audit table, while the admin notification can still receive the full key when configured.
 - Docker Compose deployment with health endpoint.
 - Separate image size limit to keep multimodal/base64 payloads bounded.
-- Telegram shows attachment preparation status while native uploads are running.\n- Audio/voice attachments can be transcribed through the provider speech-to-text endpoint before the AI request.\n- Video attachments can have their audio extracted with FFmpeg and transcribed, while the original video remains available for native-capable providers.
+- Telegram shows attachment preparation status while native uploads are running.
+- Audio/voice attachments can be transcribed through the provider speech-to-text endpoint before the AI request.
+- Video attachments can have their audio extracted with FFmpeg and transcribed, while the original video remains available for native-capable providers.
 
 ## Quick start
 
@@ -38,10 +40,10 @@ Attachment support is provider-dependent. The generic Chat Completions protocol 
 Set `AI_PROVIDERS_JSON` to define named OpenAI-compatible endpoints. Example:
 
 ```json
-{"openrouter":{"base_url":"https://openrouter.ai/api/v1","api_key":"$OPENROUTER_API_KEY","default_model":"your-model","capabilities":["text","vision"]},"custom":{"base_url":"https://example.com/v1","api_key":"your-key","default_model":"your-model","capabilities":["text"]}}
+{"openrouter":{"base_url":"https://openrouter.ai/api/v1","api_key":"$OPENROUTER_API_KEY","default_model":"your-model","capabilities":["text","vision"],"attachment_modes":{"image":"auto","document":"fallback","pdf":"fallback","audio":"transcribe","video":"transcribe"}},"custom":{"base_url":"https://example.com/v1","api_key":"your-key","default_model":"your-model","capabilities":["text"],"attachment_modes":{"image":"disabled"}}}
 ```
 
-The selected provider is stored per Telegram user. `/provider` lists providers and `/provider NAME` switches the active one. Native provider implementations can be added without changing the Telegram layer.
+The selected provider is stored per Telegram user. `/provider` lists providers and `/provider NAME` switches the active one. Provider profiles can also declare `attachment_modes` per file kind: `auto`, `native`, `transcribe`, `fallback`, or `disabled`, sehingga provider/router dapat menentukan cara menangani setiap lampiran tanpa mengubah layer Telegram.
 
 ## Per-user custom endpoint
 
