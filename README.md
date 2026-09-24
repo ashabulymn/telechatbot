@@ -22,6 +22,207 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 - Audio/voice attachments can be transcribed through the provider speech-to-text endpoint before the AI request.
 - Video attachments can have their audio extracted with FFmpeg and transcribed, while the original video remains available for native-capable providers.
 
+## Build & setup lengkap
+
+### 1. Persiapan Telegram Bot
+
+Buat bot melalui **@BotFather** dan ambil token bot. Jangan commit token ke Git dan jangan menaruhnya di `.env.example`.
+
+Isi `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=ISI_TOKEN_BOT
+TELEGRAM_MODE=polling
+```
+
+Untuk mengetahui Telegram user ID admin, gunakan bot seperti biasa lalu masukkan ID tersebut ke:
+
+```env
+ADMIN_TELEGRAM_USER_ID=123456789
+```
+
+Admin akan menerima notifikasi ketika user mengganti provider, model, Base URL, API key, protocol, capabilities, atau melakukan reset settings.
+
+### 2. Konfigurasi AI
+
+Minimal konfigurasi untuk endpoint OpenAI-compatible:
+
+```env
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=ISI_API_KEY
+AI_MODEL=NAMA_MODEL
+AI_DEFAULT_PROVIDER=default
+```
+
+Untuk endpoint OpenAI-compatible lain, cukup ubah `AI_BASE_URL`, `AI_API_KEY`, dan `AI_MODEL`.
+
+Contoh provider Responses:
+
+```env
+AI_PROVIDERS_JSON={"openai":{"protocol":"openai_responses","base_url":"https://api.openai.com/v1","api_key":"$OPENAI_API_KEY","default_model":"gpt-5","capabilities":["text","vision","file","audio","video","transcription","file_cleanup"],"attachment_modes":{"image":"auto","document":"native","pdf":"native","audio":"transcribe","video":"transcribe"}}}
+OPENAI_API_KEY=ISI_API_KEY
+AI_DEFAULT_PROVIDER=openai
+```
+
+Contoh Anthropic:
+
+```env
+AI_PROVIDERS_JSON={"anthropic":{"protocol":"anthropic_messages","base_url":"https://api.anthropic.com","api_key":"$ANTHROPIC_API_KEY","default_model":"claude-model","capabilities":["text","vision"]}}
+ANTHROPIC_API_KEY=ISI_API_KEY
+AI_DEFAULT_PROVIDER=anthropic
+```
+
+Protocol yang tersedia saat ini:
+
+| Protocol | Endpoint yang dipakai | Keterangan |
+|---|---|---|
+| `openai_chat_completions` | `<base_url>/chat/completions` | OpenAI-compatible API |
+| `openai_responses` | `<base_url>/responses` | Responses API + native file/transcription bila didukung |
+| `anthropic_messages` | `<base_url>/v1/messages` | Anthropic Messages API |
+
+> Catatan: kemampuan attachment tidak otomatis berarti provider benar-benar mendukungnya. `capabilities` harus mencerminkan kemampuan endpoint yang digunakan.
+
+### 3. Enkripsi API key custom user
+
+Generate Fernet key:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Masukkan hasilnya:
+
+```env
+CUSTOM_SETTINGS_ENCRYPTION_KEY=HASIL_FERNET
+```
+
+**Simpan key ini dengan aman.** Jika hilang, data API key custom yang terenkripsi tidak dapat didekripsi.
+
+### 4. Clone dan build
+
+```bash
+git clone https://github.com/ashabulymn/telechatbot.git
+cd telechatbot
+cp .env.example .env
+```
+
+Edit `.env`, lalu build:
+
+```bash
+docker compose up -d --build
+```
+
+Cek container:
+
+```bash
+docker compose ps
+docker compose logs -f telechatbot
+```
+
+Health endpoint:
+
+```text
+http://SERVER_IP:8080/health
+```
+
+Stop/rebuild:
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+Data database dan attachment tersimpan di Docker volume `telechatbot_data`, sehingga tidak hilang ketika container dibuat ulang.
+
+### 5. Setting bot setelah build
+
+Kirim ke bot:
+
+```text
+/start
+/help
+/settings
+/status
+```
+
+Per-user setting:
+
+```text
+/provider
+/provider NAMA_PROVIDER
+/model NAMA_MODEL
+/baseurl https://example.com/v1
+/protocol openai_chat_completions
+/capabilities text,vision
+/apikey API_KEY
+/resetsettings
+```
+
+Contoh custom endpoint:
+
+```text
+/baseurl https://example.com/v1
+/protocol openai_chat_completions
+/capabilities text,vision
+/model model-name
+/apikey sk-xxxxxxxx
+```
+
+Setelah memakai `/apikey`, hapus pesan Telegram yang berisi API key jika ingin mengurangi jejak credential di chat.
+
+### 6. Deploy dengan Docker Compose / Dokploy
+
+Repository sudah menyediakan `Dockerfile` dan `docker-compose.yml`.
+
+Di server:
+
+1. Buat project/application dari repository GitHub.
+2. Gunakan Docker Compose.
+3. Pastikan file `.env`/environment variables diisi dari konfigurasi server, bukan di-commit ke repository.
+4. Expose port container `8080` hanya jika diperlukan.
+5. Persistent volume harus dipertahankan untuk `/app/data`.
+6. Deploy/redeploy setelah environment variable diubah.
+
+Untuk mode polling, tidak diperlukan domain publik atau webhook. Bot langsung melakukan long polling ke Telegram.
+
+Untuk mode webhook:
+
+```env
+TELEGRAM_MODE=webhook
+TELEGRAM_WEBHOOK_URL=https://bot.example.com
+TELEGRAM_WEBHOOK_SECRET=SECRET_RANDOM
+TELEGRAM_WEBHOOK_HOST=0.0.0.0
+TELEGRAM_WEBHOOK_PORT=8080
+```
+
+Domain harus mengarah ke server dan reverse proxy harus meneruskan request ke port `8080`.
+
+### 7. Attachment & FFmpeg
+
+Container sudah memasang FFmpeg untuk ekstraksi audio dari video.
+
+Default:
+
+```env
+ATTACHMENT_MAX_MB=20
+ATTACHMENT_MAX_IMAGE_MB=5
+ATTACHMENT_MAX_PROMPT_CHARS=30000
+AI_VIDEO_TRANSCRIPTION_ENABLED=true
+AI_TRANSCRIPTION_MAX_SECONDS=300
+```
+
+Audio/video transcription hanya berjalan bila protocol/provider menyatakan capability `transcription` dan mode attachment mengizinkannya.
+
+### 8. Keamanan production
+
+- Jangan commit `.env`.
+- Jangan commit Telegram bot token atau API key.
+- Gunakan `CUSTOM_SETTINGS_ENCRYPTION_KEY` yang persistent.
+- Jangan menghapus Docker volume `telechatbot_data` saat redeploy.
+- API key user dikirim melalui Telegram ketika memakai `/apikey`; hapus pesan tersebut setelah selesai.
+- Admin notification dapat berisi API key penuh sesuai konfigurasi aplikasi. Pastikan akun Telegram admin aman.
+- Jika bot token pernah terekspos, revoke/regenerate token melalui BotFather sebelum deployment production.
+
 ## Quick start
 
 1. Copy `.env.example` to `.env`.
