@@ -9,6 +9,8 @@ class Database:
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.path) as db:
             await db.execute("""CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS users (user_number INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER UNIQUE NOT NULL, username TEXT, first_name TEXT, last_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS setting_changes (setting_number INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER NOT NULL, action TEXT NOT NULL, value TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             await db.execute("""CREATE TABLE IF NOT EXISTS user_settings (telegram_user_id INTEGER PRIMARY KEY, model TEXT, provider TEXT, custom_base_url TEXT, custom_api_key TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             cols = await (await db.execute("PRAGMA table_info(user_settings)")).fetchall()
             names = {c[1] for c in cols}
@@ -20,6 +22,31 @@ class Database:
                 await db.execute("ALTER TABLE user_settings ADD COLUMN custom_api_key TEXT")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(telegram_user_id, id)")
             await db.commit()
+
+    async def ensure_user(self, user_id, username=None, first_name=None, last_name=None):
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """INSERT INTO users(telegram_user_id,username,first_name,last_name)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(telegram_user_id) DO UPDATE SET
+                   username=excluded.username, first_name=excluded.first_name,
+                   last_name=excluded.last_name, updated_at=CURRENT_TIMESTAMP""",
+                (user_id, username, first_name, last_name),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT user_number FROM users WHERE telegram_user_id=?", (user_id,))
+            row = await cur.fetchone()
+        return row[0]
+
+    async def record_setting_change(self, user_id, action, value):
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "INSERT INTO setting_changes(telegram_user_id,action,value) VALUES (?,?,?)",
+                (user_id, action, value),
+            )
+            setting_number = cur.lastrowid
+            await db.commit()
+        return setting_number
 
     async def add_message(self, user_id, role, content):
         async with aiosqlite.connect(self.path) as db:
