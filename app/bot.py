@@ -97,11 +97,15 @@ class BotApp:
                 custom = await self.db.get_custom_settings(uid)
                 base_url = custom["base_url"] or profile.base_url
                 api_key = custom["api_key"] or profile.api_key
+                protocol = custom["protocol"] or profile.protocol
+                capabilities = frozenset(custom["capabilities"] or profile.capabilities)
 
                 provider = self.providers.provider(
                     provider_name,
                     base_url_override=base_url,
                     api_key_override=api_key,
+                    protocol_override=protocol,
+                    capabilities_override=capabilities,
                 )
 
                 if any(provider.attachment_mode(item) == "disabled" for item in attachments):
@@ -113,7 +117,7 @@ class BotApp:
                 # representation cannot turn pixels into useful text. Other files
                 # can fall back to bounded extraction/metadata when native support
                 # is unavailable.
-                if any(item.is_image for item in attachments) and "vision" not in profile.capabilities:
+                if any(item.is_image for item in attachments) and "vision" not in capabilities:
                     await message.answer(
                         "Provider ini belum mendukung gambar/vision. "
                         "Pilih provider lain dengan /provider."
@@ -271,7 +275,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("start"))
     async def start(message: Message):
-        await message.answer("TeleChatBot aktif.\nKirim pesan untuk mulai chat.\n/myid — lihat Telegram user ID kamu\n/provider — pilih provider\n/model <nama> — pilih model\n/baseurl <URL> — custom Base URL\n/apikey <KEY> — custom API key\n/settings — lihat pengaturan\n/status — lihat konfigurasi aktif\n/clear — hapus riwayat.")
+        await message.answer("TeleChatBot aktif.\nKirim pesan untuk mulai chat.\n/myid — lihat Telegram user ID kamu\n/provider — pilih provider\n/model <nama> — pilih model\n/baseurl <URL> — custom Base URL\n/protocol <protocol> — custom protocol\n/capabilities <list> — custom capabilities\n/apikey <KEY> — custom API key\n/settings — lihat pengaturan\n/status — lihat konfigurasi aktif\n/clear — hapus riwayat.")
 
     @router.message(Command("myid"))
     async def myid(message: Message):
@@ -279,7 +283,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("help"))
     async def help_cmd(message: Message):
-        await message.answer("/start — mulai\n/myid — lihat Telegram user ID kamu\n/provider <nama> — pilih provider preset\n/model <model> — pilih model\n/baseurl <URL> — set custom Base URL\n/apikey <KEY> — set custom API key\n/settings — lihat pengaturan custom\n/resetsettings — hapus custom Base URL & API key\n/status — status provider\n/clear — hapus riwayat\nKirim teks, foto, PDF, dokumen, audio, atau video.")
+        await message.answer("/start — mulai\n/myid — lihat Telegram user ID kamu\n/provider <nama> — pilih provider preset\n/model <model> — pilih model\n/baseurl <URL> — set custom Base URL\n/protocol <protocol> — set custom protocol\n/capabilities <list> — set custom capabilities\n/apikey <KEY> — set custom API key\n/settings — lihat pengaturan custom\n/resetsettings — hapus custom Base URL & API key\n/status — status provider\n/clear — hapus riwayat\nKirim teks, foto, PDF, dokumen, audio, atau video.")
 
     @router.message(Command("settings"))
     async def settings_cmd(message: Message):
@@ -291,7 +295,9 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         except RuntimeError as exc: await message.answer(f"Gagal membaca custom settings: {exc}"); return
         model = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model or "(default provider)"
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
-        await message.answer(f"Pengaturan AI kamu:\nProvider: {provider_name}\nBase URL: {base_url}\nAPI Key: {mask_api_key(custom['api_key'])}\nModel: {model}\n\nPerintah:\n/baseurl <URL>\n/apikey <KEY>\n/model <MODEL>\n/resetsettings")
+        protocol = custom["protocol"] or (profile.protocol if profile else "openai_chat_completions")
+        capabilities = custom["capabilities"] or (sorted(profile.capabilities) if profile else ["text"])
+        await message.answer(f"Pengaturan AI kamu:\nProvider: {provider_name}\nProtocol: {protocol}\nBase URL: {base_url}\nAPI Key: {mask_api_key(custom['api_key'])}\nModel: {model}\nCapabilities: {", ".join(capabilities)}\n\nPerintah:\n/baseurl <URL>\n/apikey <KEY>\n/model <MODEL>\n/resetsettings")
 
     @router.message(Command("status"))
     async def status(message: Message):
@@ -304,7 +310,9 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         except RuntimeError as exc: await message.answer(f"Gagal membaca custom settings: {exc}"); return
         selected = model or (profile.default_model if profile else "") or app.settings.ai_model or "(belum diset)"
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
-        await message.answer(f"Provider: {provider_name}\nBase URL: {base_url}\nAPI Key: {'custom' if custom['api_key'] else 'provider/default'}\nModel: {selected}\nCapabilities: {', '.join(sorted(profile.capabilities)) if profile else 'text'}\nMode: {app.settings.telegram_mode}")
+        protocol = custom["protocol"] or (profile.protocol if profile else "openai_chat_completions")
+        capabilities = custom["capabilities"] or (sorted(profile.capabilities) if profile else ["text"])
+        await message.answer(f"Provider: {provider_name}\nProtocol: {protocol}\nBase URL: {base_url}\nAPI Key: {'custom' if custom['api_key'] else 'provider/default'}\nModel: {selected}\nCapabilities: {', '.join(sorted(profile.capabilities)) if profile else 'text'}\nMode: {app.settings.telegram_mode}")
 
     @router.message(Command("clear"))
     async def clear(message: Message):
@@ -353,6 +361,43 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         await app.notify_admin(message.from_user.id, "BASE URL", value, message)
         await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus sesuai dengan protocol provider aktif (misalnya Chat Completions atau Responses).")
 
+    @router.message(Command("protocol"))
+    async def protocol(message: Message):
+        if not message.from_user: return
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) == 1:
+            custom = await app.db.get_custom_settings(message.from_user.id)
+            provider_name = await app.db.get_provider(message.from_user.id) or app.settings.ai_default_provider
+            profile = app.providers.profile(provider_name)
+            await message.answer("Protocol saat ini: " + (custom["protocol"] or (profile.protocol if profile else "openai_chat_completions")) + "\nTersedia: " + ", ".join(sorted(app.providers.SUPPORTED_PROTOCOLS)))
+            return
+        value = parts[1].strip().lower()
+        if value not in app.providers.SUPPORTED_PROTOCOLS:
+            await message.answer("Protocol tidak didukung. Tersedia: " + ", ".join(sorted(app.providers.SUPPORTED_PROTOCOLS)))
+            return
+        await app.db.set_custom_protocol(message.from_user.id, value)
+        await app.notify_admin(message.from_user.id, "PROTOCOL", value, message)
+        await message.answer("Custom protocol disimpan: " + value)
+
+    @router.message(Command("capabilities"))
+    async def capabilities(message: Message):
+        if not message.from_user: return
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) == 1:
+            custom = await app.db.get_custom_settings(message.from_user.id)
+            provider_name = await app.db.get_provider(message.from_user.id) or app.settings.ai_default_provider
+            profile = app.providers.profile(provider_name)
+            current = custom["capabilities"] or (sorted(profile.capabilities) if profile else ["text"])
+            await message.answer("Capabilities saat ini: " + ", ".join(current) + "\nTersedia: " + ", ".join(sorted(app.providers.CAPABILITIES)))
+            return
+        values = [x.strip().lower() for x in parts[1].split(",") if x.strip()]
+        unknown = sorted(set(values) - app.providers.CAPABILITIES)
+        if unknown or not values:
+            await message.answer("Capability tidak valid: " + ", ".join(unknown or ["kosong"]) + "\nTersedia: " + ", ".join(sorted(app.providers.CAPABILITIES)))
+            return
+        await app.db.set_custom_capabilities(message.from_user.id, values)
+        await app.notify_admin(message.from_user.id, "CAPABILITIES", ", ".join(sorted(set(values))), message)
+        await message.answer("Custom capabilities disimpan: " + ", ".join(sorted(set(values))))
     @router.message(Command("apikey"))
     async def apikey(message: Message):
         if not message.from_user: return
