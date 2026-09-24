@@ -218,3 +218,54 @@ async def test_responses_provider_cleanup_deletes_remote_files(monkeypatch):
         "https://example.com/v1/files/file_1",
         "https://example.com/v1/files/file_2",
     ]
+
+
+@pytest.mark.asyncio
+async def test_responses_provider_cleans_remote_files_when_preparation_aborts(tmp_path, monkeypatch):
+    from app.providers.openai_responses import OpenAIResponsesProvider
+    from app.providers.registry_types import ProviderRuntime
+    from app.attachments import Attachment
+
+    first_path = tmp_path / "first.txt"
+    second_path = tmp_path / "second.txt"
+    first_path.write_text("first", encoding="utf-8")
+    second_path.write_text("second", encoding="utf-8")
+
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file", "file_cleanup"}),
+        )
+    )
+
+    items = [
+        Attachment(kind="document", file_id="1", filename="first.txt", mime_type="text/plain", path=str(first_path)),
+        Attachment(kind="document", file_id="2", filename="second.txt", mime_type="text/plain", path=str(second_path)),
+    ]
+
+    uploaded = []
+    deleted = []
+
+    async def fake_upload(item):
+        file_id = f"remote-{len(uploaded) + 1}"
+        uploaded.append(file_id)
+        return file_id
+
+    async def fake_cleanup(mapping):
+        deleted.extend(mapping.remote_file_ids)
+
+    monkeypatch.setattr(provider, "upload_attachment", fake_upload)
+    monkeypatch.setattr(provider, "cleanup_attachments", fake_cleanup)
+
+    async def progress(index, total, attachment, state):
+        if index == 2 and state == "preparing":
+            raise RuntimeError("simulated preparation abort")
+
+    with pytest.raises(RuntimeError, match="simulated preparation abort"):
+        await provider.prepare_attachments(items, progress=progress)
+
+    assert uploaded == ["remote-1"]
+    assert deleted == ["remote-1"]
