@@ -31,6 +31,7 @@ class OpenAIResponsesProvider(AIProvider):
             api_key=self.settings.ai_api_key,
             default_model=self.settings.ai_model,
             extra_body={},
+            capabilities=frozenset({"text", "vision", "file", "audio", "video"}),
         )
 
     def _base(self):
@@ -129,7 +130,7 @@ class OpenAIResponsesProvider(AIProvider):
         return str(file_id)
 
     def supports_native_upload(self, attachment):
-        return bool(attachment.path)
+        return bool(attachment.path and "file" in self.runtime.capabilities)
 
     async def transcribe_attachment(self, attachment):
         if not attachment.path or attachment.kind not in {"audio", "video"}:
