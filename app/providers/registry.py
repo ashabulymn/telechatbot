@@ -114,7 +114,7 @@ class ProviderRegistry:
     def get(self, name):
         return self._profiles.get(name)
 
-    def provider(self, name=None, base_url_override=None, api_key_override=None, protocol_override=None, capabilities_override=None) -> AIProvider:
+    def provider(self, name=None, base_url_override=None, api_key_override=None, protocol_override=None, capabilities_override=None, model_capabilities_override=None, model_capabilities_known=False) -> AIProvider:
         selected = name or self.settings.ai_default_provider
         profile = self._profiles.get(selected)
         if not profile:
@@ -128,6 +128,8 @@ class ProviderRegistry:
             default_model=profile.default_model, extra_body=profile.extra_body,
             capabilities=frozenset(capabilities_override) if capabilities_override is not None else profile.capabilities,
             attachment_modes=profile.attachment_modes,
+            model_capabilities=frozenset(model_capabilities_override or ()),
+            model_capabilities_known=bool(model_capabilities_known),
         )
         if protocol == "openai_responses":
             return OpenAIResponsesProvider(runtime)
