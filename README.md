@@ -16,7 +16,9 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 - Environment-based secrets; no credentials in source code.
 - Custom per-user API keys are encrypted at rest with Fernet when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured.
 - API keys are not stored in the setting-change audit table, while the admin notification can still receive the full key when configured.
-- Docker Compose deployment with health endpoint.\n- Separate image size limit to keep multimodal/base64 payloads bounded.\n- Telegram shows attachment preparation status while native uploads are running.\n- Audio/voice attachments can be transcribed through the provider speech-to-text endpoint before the AI request.\n- Video attachments can have their audio extracted with FFmpeg and transcribed, while the original video remains available for native-capable providers.
+- Docker Compose deployment with health endpoint.
+- Separate image size limit to keep multimodal/base64 payloads bounded.
+- Telegram shows attachment preparation status while native uploads are running.\n- Audio/voice attachments can be transcribed through the provider speech-to-text endpoint before the AI request.\n- Video attachments can have their audio extracted with FFmpeg and transcribed, while the original video remains available for native-capable providers.
 
 ## Quick start
 
@@ -39,7 +41,7 @@ Set `AI_PROVIDERS_JSON` to define named OpenAI-compatible endpoints. Example:
 {"openrouter":{"base_url":"https://openrouter.ai/api/v1","api_key":"$OPENROUTER_API_KEY","default_model":"your-model","capabilities":["text","vision"]},"custom":{"base_url":"https://example.com/v1","api_key":"your-key","default_model":"your-model","capabilities":["text"]}}
 ```
 
-The selected provider is stored per Telegram user. `/provider` lists providers and `/provider NAME` switches the active one. Native provider implementations can be added later without changing the Telegram layer.
+The selected provider is stored per Telegram user. `/provider` lists providers and `/provider NAME` switches the active one. Native provider implementations can be added without changing the Telegram layer.
 
 ## Per-user custom endpoint
 
