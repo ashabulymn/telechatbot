@@ -160,10 +160,11 @@ class BotApp:
                         )
                     except Exception:
                         pass
+
                 async def attachment_progress(index, total, item, state):
                     labels = {
                         "preparing": "Menyiapkan",
-                        "uploading": "Mengirim",
+                        "uploading": "Mengirim native",
                         "fallback": "Fallback",
                         "ready": "Siap",
                         "failed": "Gagal",
@@ -190,6 +191,12 @@ class BotApp:
                     )
                     if should_transcribe:
                         try:
+                            await status.edit_text(
+                                f"🎙 Transkripsi {item.filename or item.kind}..."
+                            )
+                        except Exception:
+                            pass
+                        try:
                             transcript = await provider.transcribe_attachment(item)
                         except ProviderError as exc:
                             transcript = None
@@ -203,16 +210,18 @@ class BotApp:
                             transcriptions.append(
                                 f"[Transkripsi {item.filename or item.kind}]\n{transcript}"
                             )
-                            # Audio is fully represented by its transcript.
-                            # Audio is represented by transcript. Video is also
-                            # removed when the selected model lacks video input;
-                            # otherwise the native provider may inspect both.
                             if item.kind == "audio" or (
                                 item.kind == "video"
                                 and model_info
                                 and model_info.capabilities_known
                                 and "video" not in model_info.capabilities
                             ):
+                                try:
+                                    await status.edit_text(
+                                        f"✅ {item.filename or item.kind} → transkripsi → teks"
+                                    )
+                                except Exception:
+                                    pass
                                 continue
                     remaining_attachments.append(item)
 
@@ -324,7 +333,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("help"))
     async def help_cmd(message: Message):
-        await message.answer("/start — mulai\n/myid — lihat Telegram user ID kamu\n/provider <nama> — pilih provider preset\n/model <model> — pilih model\n/models — daftar model dari provider\n/baseurl <URL> — set custom Base URL\n/protocol <protocol> — set custom protocol\n/capabilities <list> — set custom capabilities\n/apikey <KEY> — set custom API key\n/settings — lihat pengaturan custom\n/resetsettings — hapus custom Base URL & API key\n/status — status provider\n/clear — hapus riwayat\nKirim teks, foto, PDF, dokumen, audio, atau video.")
+        await message.answer("/start — mulai\n/myid — lihat Telegram user ID kamu\n/provider <nama> — pilih provider preset\n/model <model> — pilih model\n/models — daftar model dari provider\n/baseurl <URL> — set custom Base URL\n/protocol <protocol> — set custom protocol\n/capabilities <list> — set custom capabilities\n/apikey <KEY> — custom API key\n/settings — lihat pengaturan custom\n/resetsettings — hapus custom Base URL & API key\n/status — status provider\n/clear — hapus riwayat\nKirim teks, foto, PDF, dokumen, audio, atau video.")
 
     @router.message(Command("settings"))
     async def settings_cmd(message: Message):
