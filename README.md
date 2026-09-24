@@ -64,6 +64,16 @@ OPENAI_API_KEY=ISI_API_KEY
 AI_DEFAULT_PROVIDER=openai
 ```
 
+Contoh Gemini native:
+
+```env
+AI_PROVIDERS_JSON={"gemini":{"protocol":"gemini_generate_content","base_url":"https://generativelanguage.googleapis.com/v1beta","api_key":"$GEMINI_API_KEY","default_model":"gemini-3.8-flash","capabilities":["text","vision"]}}
+GEMINI_API_KEY=ISI_API_KEY
+AI_DEFAULT_PROVIDER=gemini
+```
+
+Gemini juga menyediakan OpenAI compatibility melalui base URL `https://generativelanguage.googleapis.com/v1beta/openai/`; protocol native di atas digunakan untuk adapter Gemini khusus. citeturn0search0turn0search1
+
 Contoh Anthropic:
 
 ```env
@@ -79,6 +89,7 @@ Protocol yang tersedia saat ini:
 | `openai_chat_completions` | `<base_url>/chat/completions` | OpenAI-compatible API |
 | `openai_responses` | `<base_url>/responses` | Responses API + native file/transcription bila didukung |
 | `anthropic_messages` | `<base_url>/v1/messages` | Anthropic Messages API |
+| `gemini_generate_content` | `<base_url>/models/<model>:generateContent` | Gemini native Generate Content API |
 
 > Catatan: kemampuan attachment tidak otomatis berarti provider benar-benar mendukungnya. `capabilities` harus mencerminkan kemampuan endpoint yang digunakan.
 
@@ -252,7 +263,7 @@ Each Telegram user can override the active provider without changing server envi
 
 - `/settings` — show the active settings (API key is masked).
 - `/baseurl https://example.com/v1` — set a custom Base URL.
-- `/protocol openai_responses` — override the protocol used by the custom endpoint. Supported: `openai_chat_completions`, `openai_responses`, `anthropic_messages`.
+- `/protocol openai_responses` — override the protocol used by the custom endpoint. Supported: `openai_chat_completions`, `openai_responses`, `anthropic_messages`, `gemini_generate_content`.
 - `/capabilities text,vision,file,transcription` — declare capabilities of the custom endpoint. This controls attachment behavior and prevents the bot from assuming the preset provider's capabilities.
 - `/apikey YOUR_KEY` — set a custom API key. The key is encrypted at rest when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured and is never displayed in full to the user.
 - `/model MODEL_NAME` — select the model for the current user.
