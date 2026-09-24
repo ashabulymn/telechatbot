@@ -260,6 +260,11 @@ class BotApp:
                     prepared_text,
                     progress=attachment_progress,
                 )
+                if transcriptions:
+                    mapping.routing = [
+                        *(f"{part.split(']')[0].lstrip('[')}: transkripsi" for part in transcriptions),
+                        *mapping.routing,
+                    ]
                 content = mapping.parts or prepared_text
                 attachment_note = mapping.note
                 if mapping.warnings:
