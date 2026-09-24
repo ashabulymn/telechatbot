@@ -1,12 +1,14 @@
 import json
 from typing import AsyncIterator
-from urllib.parse import urlparse\n\nfrom ..attachments import Attachment\nfrom ..file_parser import FileParser
+from urllib.parse import urlparse
 
 import httpx
 
+from ..attachments import Attachment
+from .attachments import AttachmentMapping
 from .base import AIProvider, ProviderResponse
 from .errors import ProviderConfigurationError, ProviderError
-from .registry_types import ProviderRuntime\nfrom .attachments import AttachmentMapping
+from .registry_types import ProviderRuntime
 
 
 class OpenAICompatibleProvider(AIProvider):
@@ -114,4 +116,7 @@ class OpenAICompatibleProvider(AIProvider):
             pass
         return ProviderError(
             f"Provider AI HTTP {response.status_code}" + (f": {detail}" if detail else ".")
-        )\n    async def prepare_attachments(self, attachments: list[Attachment], text: str = "") -> AttachmentMapping:\n        return self.map_attachments(attachments, text)\n
+        )
+
+    async def prepare_attachments(self, attachments: list[Attachment], text: str = "") -> AttachmentMapping:
+        return self.map_attachments(attachments, text)
