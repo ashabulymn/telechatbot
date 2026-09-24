@@ -37,7 +37,7 @@ class Database:
 
     async def init(self):
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        async with aiosqlite.connect(self.path) as db:
+        async with aiosqlite.connect(self.path, timeout=30) as db:
             await db.execute("""CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             await db.execute("""CREATE TABLE IF NOT EXISTS users (user_number INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER UNIQUE NOT NULL, username TEXT, first_name TEXT, last_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             await db.execute("""CREATE TABLE IF NOT EXISTS setting_changes (setting_number INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER NOT NULL, action TEXT NOT NULL, value TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
