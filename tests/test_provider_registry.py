@@ -222,3 +222,52 @@ def test_registry_supports_gemini_generate_content(monkeypatch):
     url, _, payload = provider._request([{"role": "user", "content": "hello"}])
     assert url.endswith("/models/gemini-test:generateContent")
     assert payload["contents"][0]["parts"][0]["text"] == "hello"
+
+
+def test_registry_passes_model_capability_context(monkeypatch):
+    _reset_settings(monkeypatch)
+    monkeypatch.setenv(
+        "AI_PROVIDERS_JSON",
+        json.dumps({
+            "responses": {
+                "protocol": "openai_responses",
+                "base_url": "https://example.com/v1",
+                "api_key": "key",
+                "default_model": "model",
+                "capabilities": ["text", "vision", "file"],
+            }
+        }),
+    )
+    provider = ProviderRegistry().provider(
+        "responses",
+        model_capabilities_override={"vision"},
+        model_capabilities_known=True,
+    )
+    assert provider.runtime.model_capabilities == frozenset({"vision"})
+    assert provider.runtime.model_capabilities_known is True
+
+
+def test_responses_native_upload_respects_model_capabilities(tmp_path):
+    from app.attachments import Attachment
+
+    path = tmp_path / "note.txt"
+    path.write_text("hello", encoding="utf-8")
+    item = Attachment(
+        kind="document",
+        file_id="doc-1",
+        filename="note.txt",
+        mime_type="text/plain",
+        path=str(path),
+    )
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file"}),
+            model_capabilities=frozenset({"vision"}),
+            model_capabilities_known=True,
+        )
+    )
+    assert provider.supports_native_upload(item) is False
