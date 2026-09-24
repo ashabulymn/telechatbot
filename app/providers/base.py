@@ -2,6 +2,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
+from ..attachments import Attachment
+from .attachments import AttachmentMapping
+
 
 @dataclass
 class ProviderResponse:
@@ -18,3 +21,14 @@ class AIProvider(ABC):
         response = await self.chat(messages, model)
         if response.text:
             yield response.text
+
+    def map_attachments(
+        self,
+        attachments: list[Attachment],
+        text: str = "",
+    ) -> AttachmentMapping:
+        """Map Telegram attachments into this provider's message format."""
+        from .attachments import AttachmentAdapter
+        from ..file_parser import FileParser
+
+        return AttachmentAdapter(FileParser()).map(attachments, text)
