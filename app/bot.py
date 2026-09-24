@@ -112,6 +112,16 @@ class BotApp:
                     base_url_override=base_url,
                     api_key_override=api_key,
                 )
+                status = await message.answer(
+                    "📎 Menyiapkan lampiran..." if attachments else "⏳ Memproses..."
+                )
+                if attachments:
+                    try:
+                        await status.edit_text(
+                            f"📎 Menyiapkan {len(attachments)} lampiran..."
+                        )
+                    except Exception:
+                        pass
                 mapping = await provider.prepare_attachments(attachments, text)
                 content = mapping.parts or text
                 attachment_note = mapping.note
@@ -125,7 +135,11 @@ class BotApp:
                 )
                 messages.extend(history)
                 selected_model = await self.db.get_model(uid)
-                status = await message.answer("⏳ Memproses...")
+                if not attachments:
+                    try:
+                        await status.edit_text("⏳ Memproses...")
+                    except Exception:
+                        pass
                 full_text = ""
                 pending = ""
                 last_update = 0
