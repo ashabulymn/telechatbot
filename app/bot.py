@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 from .attachments import AttachmentManager
 from .config import get_settings
@@ -28,6 +28,16 @@ def mask_api_key(value):
         return "••••••••"
     return f"{value[:4]}••••••••{value[-4:]}"
 
+
+def model_keyboard(models, current=None, page=0, per_page=8):
+    start = page * per_page
+    page_models = models[start:start + per_page]
+    rows = [[InlineKeyboardButton(text=(('✓ ' if name == current else '') + name[:60]), callback_data='setmodel:' + name)] for name in page_models]
+    nav = []
+    if page > 0: nav.append(InlineKeyboardButton(text='← Sebelumnya', callback_data='modelpage:' + str(page - 1)))
+    if start + per_page < len(models): nav.append(InlineKeyboardButton(text='Berikutnya →', callback_data='modelpage:' + str(page + 1)))
+    if nav: rows.append(nav)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 async def send_long_message(message, text):
     text = text or "Provider mengembalikan respons kosong."
@@ -339,44 +349,46 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         await app.notify_admin(message.from_user.id, "PROVIDER", value, message)
         await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
 
+    async def _discover_models(uid):
+        provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
+        profile = app.providers.profile(provider_name)
+        custom = await app.db.get_custom_settings(uid)
+        provider = app.providers.provider(provider_name, base_url_override=custom["base_url"] or None, api_key_override=custom["api_key"] or None, protocol_override=custom["protocol"] or None, capabilities_override=custom["capabilities"] or None)
+        available = await provider.list_models()
+        current = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model
+        return provider_name, available, current
+
     @router.message(Command("models"))
     async def models(message: Message):
         if not message.from_user: return
-        uid = message.from_user.id
-        provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
-        profile = app.providers.profile(provider_name)
+        try: provider_name, available, current = await _discover_models(message.from_user.id)
+        except ProviderError as exc: await message.answer(f"Gagal mengambil daftar model: {exc}"); return
+        except Exception: log.exception("Model discovery failed"); await message.answer("Gagal mengambil daftar model dari provider."); return
+        if not available: await message.answer("Provider " + provider_name + " tidak mengembalikan daftar model otomatis.\nGunakan /model <nama-model> secara manual."); return
+        await message.answer(f"🤖 Model tersedia — {provider_name}\nHalaman 1 • {len(available)} model\nTap model untuk mengaktifkan:", reply_markup=model_keyboard(available, current, 0))
+
+    @router.callback_query(F.data.startswith("modelpage:"))
+    async def model_page(callback: CallbackQuery):
+        if not callback.from_user: return
         try:
-            custom = await app.db.get_custom_settings(uid)
-            provider = app.providers.provider(
-                provider_name,
-                base_url_override=custom["base_url"] or None,
-                api_key_override=custom["api_key"] or None,
-                protocol_override=custom["protocol"] or None,
-                capabilities_override=custom["capabilities"] or None,
-            )
-            available = await provider.list_models()
-        except ProviderError as exc:
-            await message.answer(f"Gagal mengambil daftar model: {exc}")
-            return
-        except Exception:
-            log.exception("Model discovery failed")
-            await message.answer("Gagal mengambil daftar model dari provider.")
-            return
-        if not available:
-            await message.answer(
-                "Provider `" + provider_name + "` tidak mengembalikan daftar model otomatis.\n"
-                "Gunakan /model <nama-model> secara manual."
-            )
-            return
-        current = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model
-        lines = ["Model tersedia — " + provider_name + ":", ""]
-        for name in available[:50]:
-            marker = " ← aktif" if name == current else ""
-            lines.append("• " + name + marker)
-        if len(available) > 50:
-            lines.append("\nMenampilkan 50 dari " + str(len(available)) + " model.")
-        lines.append("\nPilih dengan: /model <nama-model>")
-        await message.answer("\n".join(lines))
+            page = int((callback.data or "").split(":", 1)[1])
+            provider_name, available, current = await _discover_models(callback.from_user.id)
+            if not available: await callback.answer("Tidak ada model yang tersedia.", show_alert=True); return
+            page = max(0, min(page, (len(available) - 1) // 8))
+            await callback.message.edit_text(f"🤖 Model tersedia — {provider_name}\nHalaman {page + 1} • {len(available)} model\nTap model untuk mengaktifkan:", reply_markup=model_keyboard(available, current, page))
+            await callback.answer()
+        except ProviderError as exc: await callback.answer(str(exc)[:180], show_alert=True)
+        except Exception: log.exception("Model pagination failed"); await callback.answer("Gagal memuat halaman model.", show_alert=True)
+
+    @router.callback_query(F.data.startswith("setmodel:"))
+    async def set_model_callback(callback: CallbackQuery):
+        if not callback.from_user: return
+        value = (callback.data or "").split(":", 1)[1].strip()
+        if not value: await callback.answer("Model tidak valid.", show_alert=True); return
+        await app.db.set_model(callback.from_user.id, value)
+        await app.notify_admin(callback.from_user.id, "MODEL", value, None)
+        await callback.answer("Model diaktifkan.")
+        if callback.message: await callback.message.edit_text(f"✅ Model aktif: {value}")
 
     @router.message(Command("model"))
     async def model(message: Message):
@@ -386,16 +398,9 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             current = await app.db.get_model(message.from_user.id)
             provider_name = await app.db.get_provider(message.from_user.id) or app.settings.ai_default_provider
             profile = app.providers.profile(provider_name)
-            await message.answer(
-                f"Model saat ini: {current or (profile.default_model if profile else '') or app.settings.ai_model or '(default provider)'}\n"
-                "Gunakan /models untuk melihat model yang tersedia."
-            )
+            await message.answer(f"Model saat ini: {current or (profile.default_model if profile else '') or app.settings.ai_model or '(default provider)'}\nGunakan /models untuk memilih model.")
             return
-        value = parts[1].strip()
-        await app.db.set_model(message.from_user.id, value)
-        await app.notify_admin(message.from_user.id, "MODEL", value, message)
-        await message.answer(f"Model diubah ke: {value}")
-
+        value = parts[1].strip(); await app.db.set_model(message.from_user.id, value); await app.notify_admin(message.from_user.id, "MODEL", value, message); await message.answer(f"Model diubah ke: {value}")
     @router.message(Command("baseurl"))
     async def baseurl(message: Message):
         if not message.from_user: return
