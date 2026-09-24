@@ -7,7 +7,7 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 - Telegram long polling or webhook mode.
 - Universal provider profiles via configurable Base URL, API key, model, protocol and capabilities.
 - Per-user provider switching with `/provider`.
-- Per-user custom Base URL and API key overrides with `/baseurl` and `/apikey`.
+- Per-user custom Base URL, API key, protocol, and capability overrides.
 - Provider adapter boundary with optional native file upload support.
 - Per-user conversation history and model selection.
 - Stable sequential user and setting numbers for admin setting-change notifications.
@@ -50,14 +50,16 @@ The selected provider is stored per Telegram user. `/provider` lists providers a
 Each Telegram user can override the active provider without changing server environment variables:
 
 - `/settings` — show the active settings (API key is masked).
-- `/baseurl https://example.com/v1` — set a custom OpenAI-compatible Base URL.
+- `/baseurl https://example.com/v1` — set a custom Base URL.
+- `/protocol openai_responses` — override the protocol used by the custom endpoint. Supported: `openai_chat_completions`, `openai_responses`.
+- `/capabilities text,vision,file,transcription` — declare capabilities of the custom endpoint. This controls attachment behavior and prevents the bot from assuming the preset provider's capabilities.
 - `/apikey YOUR_KEY` — set a custom API key. The key is encrypted at rest when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured and is never displayed in full to the user.
 - `/model MODEL_NAME` — select the model for the current user.
 - `/resetsettings` — remove the custom Base URL and API key while keeping provider/model selection.
 
 Existing legacy plaintext custom API keys remain readable for migration; once read while `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured, they are automatically re-encrypted. New custom API keys require the encryption key.
 
-A custom endpoint must match the selected provider protocol. For example, `openai_chat_completions` uses `<base_url>/chat/completions`, while `openai_responses` uses `<base_url>/responses` and may also use the provider's file/transcription endpoints when the declared capabilities enable them. Because an API key sent through Telegram appears in the Telegram chat history, delete the `/apikey ...` message after setting it if that matters for your threat model.
+A custom endpoint can override the preset provider protocol and capabilities per user. For example, `openai_chat_completions` uses `<base_url>/chat/completions`, while `openai_responses` uses `<base_url>/responses` and may also use the provider's file/transcription endpoints when the declared capabilities enable them. Because an API key sent through Telegram appears in the Telegram chat history, delete the `/apikey ...` message after setting it if that matters for your threat model.
 
 ## Admin setting notifications
 
