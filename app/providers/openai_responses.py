@@ -132,6 +132,24 @@ class OpenAIResponsesProvider(AIProvider):
                             await progress(index, total, item, "uploading")
                         file_id = await self.upload_attachment(item)
                     except Exception as exc:
+                        if item.kind in {"audio", "video"} and self.supports_transcription(item):
+                            try:
+                                transcript = await self.transcribe_attachment(item)
+                            except ProviderError:
+                                transcript = None
+                            if transcript:
+                                warnings.append(
+                                    f"{filename}: upload native gagal; dipakai transkripsi sebagai fallback."
+                                )
+                                parts.append({
+                                    "type": "text",
+                                    "text": f"\\n[Transkripsi {filename}]\\n{transcript}",
+                                })
+                                notes.append(f"[Transkripsi: {filename}]")
+                                if progress:
+                                    await progress(index, total, item, "fallback")
+                                    await progress(index, total, item, "ready")
+                                continue
                         warning = f"{filename}: upload native gagal ({str(exc)[:180]}). Dipakai fallback."
                         warnings.append(warning)
                         if progress:
