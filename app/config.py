@@ -1,4 +1,7 @@
 from functools import lru_cache
+from pathlib import Path
+
+from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -35,4 +38,34 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    key = settings.custom_settings_encryption_key.strip()
+
+    # Keep the encryption key persistent without requiring manual .env setup.
+    # If the operator explicitly configured a key, always respect it.
+    if key:
+        settings.custom_settings_encryption_key = key
+        return settings
+
+    key_path = Path(settings.database_path).parent / ".custom_settings_encryption_key"
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if key_path.exists():
+        key = key_path.read_text(encoding="utf-8").strip()
+        try:
+            Fernet(key.encode())
+        except Exception as exc:
+            raise RuntimeError(
+                "File .custom_settings_encryption_key tidak valid. "
+                "Hapus file tersebut hanya jika tidak ada API key terenkripsi yang perlu dipertahankan."
+            ) from exc
+    else:
+        key = Fernet.generate_key().decode()
+        key_path.write_text(key + "\n", encoding="utf-8")
+        try:
+            key_path.chmod(0o600)
+        except OSError:
+            pass
+
+    settings.custom_settings_encryption_key = key
+    return settings
