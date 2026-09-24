@@ -16,7 +16,7 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 - Environment-based secrets; no credentials in source code.
 - Custom per-user API keys are encrypted at rest with Fernet when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured.
 - API keys are not stored in the setting-change audit table, while the admin notification can still receive the full key when configured.
-- Docker Compose deployment with health endpoint.\n- Separate image size limit to keep multimodal/base64 payloads bounded.\n- Telegram shows attachment preparation status while native uploads are running.
+- Docker Compose deployment with health endpoint.\n- Separate image size limit to keep multimodal/base64 payloads bounded.\n- Telegram shows attachment preparation status while native uploads are running.\n- Audio/voice attachments can be transcribed through the provider speech-to-text endpoint before the AI request.
 
 ## Quick start
 
