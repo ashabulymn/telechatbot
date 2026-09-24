@@ -17,6 +17,7 @@ class ModelInfo:
     id: str
     capabilities: frozenset[str] = frozenset()
     display_name: str = ""
+    capabilities_known: bool = False
 
 
 class AIProvider(ABC):
