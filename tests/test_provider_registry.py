@@ -148,3 +148,29 @@ def test_responses_provider_disabled_mode_blocks_both_paths(tmp_path):
     assert provider.attachment_mode(item) == "disabled"
     assert provider.supports_native_upload(item) is False
     assert provider.supports_transcription(item) is False
+
+
+def test_registry_provider_overrides_protocol_and_capabilities(monkeypatch):
+    _reset_settings(monkeypatch)
+    monkeypatch.setenv(
+        "AI_PROVIDERS_JSON",
+        json.dumps(
+            {
+                "custom": {
+                    "protocol": "openai_chat_completions",
+                    "base_url": "https://example.com/v1",
+                    "api_key": "key",
+                    "default_model": "model",
+                    "capabilities": ["text"],
+                }
+            }
+        ),
+    )
+    registry = ProviderRegistry()
+    provider = registry.provider(
+        "custom",
+        protocol_override="openai_responses",
+        capabilities_override={"text", "file", "transcription"},
+    )
+    assert isinstance(provider, OpenAIResponsesProvider)
+    assert provider.runtime.capabilities == frozenset({"text", "file", "transcription"})
