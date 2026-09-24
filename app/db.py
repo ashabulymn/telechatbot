@@ -1,4 +1,5 @@
 import aiosqlite
+import json
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -40,7 +41,7 @@ class Database:
             await db.execute("""CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             await db.execute("""CREATE TABLE IF NOT EXISTS users (user_number INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER UNIQUE NOT NULL, username TEXT, first_name TEXT, last_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             await db.execute("""CREATE TABLE IF NOT EXISTS setting_changes (setting_number INTEGER PRIMARY KEY AUTOINCREMENT, telegram_user_id INTEGER NOT NULL, action TEXT NOT NULL, value TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
-            await db.execute("""CREATE TABLE IF NOT EXISTS user_settings (telegram_user_id INTEGER PRIMARY KEY, model TEXT, provider TEXT, custom_base_url TEXT, custom_api_key TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS user_settings (telegram_user_id INTEGER PRIMARY KEY, model TEXT, provider TEXT, custom_base_url TEXT, custom_api_key TEXT, custom_protocol TEXT, custom_capabilities TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             cols = await (await db.execute("PRAGMA table_info(user_settings)")).fetchall()
             names = {c[1] for c in cols}
             if "provider" not in names:
@@ -49,6 +50,10 @@ class Database:
                 await db.execute("ALTER TABLE user_settings ADD COLUMN custom_base_url TEXT")
             if "custom_api_key" not in names:
                 await db.execute("ALTER TABLE user_settings ADD COLUMN custom_api_key TEXT")
+            if "custom_protocol" not in names:
+                await db.execute("ALTER TABLE user_settings ADD COLUMN custom_protocol TEXT")
+            if "custom_capabilities" not in names:
+                await db.execute("ALTER TABLE user_settings ADD COLUMN custom_capabilities TEXT")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(telegram_user_id, id)")
             await db.commit()
 
@@ -126,7 +131,7 @@ class Database:
     async def get_custom_settings(self, user_id):
         async with aiosqlite.connect(self.path) as db:
             cur = await db.execute(
-                "SELECT custom_base_url, custom_api_key FROM user_settings WHERE telegram_user_id=?",
+                "SELECT custom_base_url, custom_api_key, custom_protocol, custom_capabilities FROM user_settings WHERE telegram_user_id=?",
                 (user_id,),
             )
             row = await cur.fetchone()
@@ -134,9 +139,19 @@ class Database:
         api_key = self._decrypt_api_key(encrypted)
         if encrypted and api_key and not encrypted.startswith("enc:v1:") and self._encryption_key:
             await self.set_custom_api_key(user_id, api_key)
+        capabilities = None
+        if row and row[3]:
+            try:
+                parsed = json.loads(row[3])
+                if isinstance(parsed, list):
+                    capabilities = [str(x).strip().lower() for x in parsed if str(x).strip()]
+            except (TypeError, ValueError):
+                capabilities = None
         return {
             "base_url": row[0] if row and row[0] else None,
             "api_key": api_key,
+            "protocol": row[2] if row and row[2] else None,
+            "capabilities": capabilities,
         }
 
     async def set_custom_base_url(self, user_id, base_url):
@@ -158,10 +173,21 @@ class Database:
             )
             await db.commit()
 
+
+    async def set_custom_protocol(self, user_id, protocol):
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("INSERT INTO user_settings(telegram_user_id,custom_protocol) VALUES (?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET custom_protocol=excluded.custom_protocol,updated_at=CURRENT_TIMESTAMP", (user_id, protocol))
+            await db.commit()
+
+    async def set_custom_capabilities(self, user_id, capabilities):
+        encoded = json.dumps(sorted(set(capabilities))) if capabilities is not None else None
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("INSERT INTO user_settings(telegram_user_id,custom_capabilities) VALUES (?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET custom_capabilities=excluded.custom_capabilities,updated_at=CURRENT_TIMESTAMP", (user_id, encoded))
+            await db.commit()
     async def clear_custom_settings(self, user_id):
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
-                "UPDATE user_settings SET custom_base_url=NULL, custom_api_key=NULL, updated_at=CURRENT_TIMESTAMP WHERE telegram_user_id=?",
+                "UPDATE user_settings SET custom_base_url=NULL, custom_api_key=NULL, custom_protocol=NULL, custom_capabilities=NULL, updated_at=CURRENT_TIMESTAMP WHERE telegram_user_id=?",
                 (user_id,),
             )
             await db.commit()
