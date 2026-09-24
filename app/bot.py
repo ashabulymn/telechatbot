@@ -408,6 +408,34 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         await callback.answer("Model diaktifkan.")
         if callback.message: await callback.message.edit_text(f"✅ Model aktif: {value}")
 
+    @router.message(Command("modelinfo"))
+    async def modelinfo(message: Message):
+        if not message.from_user:
+            return
+        try:
+            provider_name, info, current = await _discover_model_info(message.from_user.id)
+        except ProviderError as exc:
+            await message.answer(f"Gagal mengambil metadata model: {exc}")
+            return
+        except Exception:
+            log.exception("Model metadata discovery failed")
+            await message.answer("Gagal mengambil metadata model dari provider.")
+            return
+        selected = next((item for item in info if item.id == current), None)
+        if not selected:
+            await message.answer(
+                f"Model aktif: {current or '(belum diset)'}\n"
+                "Metadata capability model ini tidak tersedia dari API provider."
+            )
+            return
+        badges = {"vision": "👁 Vision", "audio": "🎙 Audio", "video": "🎬 Video", "file": "📎 File", "reasoning": "🧠 Reasoning"}
+        caps = [label for key, label in badges.items() if key in selected.capabilities]
+        await message.answer(
+            f"🤖 Model: {selected.id}\nProvider: {provider_name}\n"
+            + ("Capability: " + ", ".join(caps) if caps else "Capability: tidak dilaporkan provider.")
+            + (f"\nNama: {selected.display_name}" if selected.display_name else "")
+        )
+
     @router.message(Command("model"))
     async def model(message: Message):
         if not message.from_user: return
