@@ -580,7 +580,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             except RuntimeError as exc: await message.answer(f"Gagal membaca custom settings: {exc}"); return
             current = custom["base_url"] or "(belum diset; memakai provider preset)"
             app._pending_setting[message.from_user.id] = "baseurl"
-            await message.answer(f"Custom Base URL saat ini:\n{current}\n\nKirim URL Base URL pada pesan berikutnya.\nContoh: https://9router.akasia.dev/v1")
+            await message.answer(f"Custom Base URL saat ini:\n{current}\n\nKirim URL Base URL pada pesan berikutnya.")
             return
         value = parts[1].strip().rstrip("/")
         if not valid_base_url(value): await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1"); return
