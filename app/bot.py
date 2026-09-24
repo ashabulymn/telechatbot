@@ -6,7 +6,7 @@ from .attachments import AttachmentManager
 from .config import get_settings
 from .db import Database
 from .file_parser import FileParser
-from .providers import OpenAICompatibleProvider
+from .providers.registry import ProviderRegistry
 from .providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class BotApp:
         self.db = db
         self.attachments = AttachmentManager(bot)
         self.parser = FileParser(get_settings().attachment_max_prompt_chars)
-        self.provider = OpenAICompatibleProvider()
+        self.providers = ProviderRegistry()
         self.settings = get_settings()
 
     async def handle_message(self, message: Message):
@@ -67,7 +67,7 @@ class BotApp:
         messages.extend(history)
 
         try:
-            result = await self.provider.chat(messages, await self.db.get_model(uid))
+            provider_name = await self.db.get_provider(uid)\n            profile = self.providers.profile(provider_name)\n            result = await self.providers.provider(provider_name).chat(messages, await self.db.get_model(uid))
         except ProviderError as exc:
             await message.answer(str(exc))
             return
@@ -116,6 +116,24 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         if message.from_user:
             await app.db.clear(message.from_user.id)
         await message.answer("Riwayat percakapan dihapus.")
+
+    @router.message(Command("provider"))
+    async def provider(message: Message):
+        if not message.from_user:
+            return
+        parts=(message.text or "").split(maxsplit=1)
+        current=await app.db.get_provider(message.from_user.id)
+        if len(parts)==1:
+            names=app.providers.names()
+            await message.answer("Provider tersedia:\n" + "\n".join(f"• {n}" + (" ← aktif" if n == (current or app.settings.ai_default_provider) else "") for n in names))
+            return
+        value=parts[1].strip()
+        if value not in app.providers.names():
+            await message.answer("Provider tidak ditemukan. Ketik /provider untuk melihat daftar.")
+            return
+        await app.db.set_provider(message.from_user.id,value)
+        profile=app.providers.profile(value)
+        await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
 
     @router.message(Command("model"))
     async def model(message: Message):
