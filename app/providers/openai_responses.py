@@ -218,7 +218,16 @@ class OpenAIResponsesProvider(AIProvider):
             return "video" in self.runtime.capabilities
         return True
 
+    def supports_transcription(self, attachment):
+        return (
+            bool(attachment.path)
+            and attachment.kind in {"audio", "video"}
+            and "transcription" in self.runtime.capabilities
+        )
+
     async def transcribe_attachment(self, attachment):
+        if not self.supports_transcription(attachment):
+            return None
         if not attachment.path or attachment.kind not in {"audio", "video"}:
             return None
 
