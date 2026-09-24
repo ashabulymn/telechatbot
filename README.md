@@ -8,7 +8,7 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 - Universal provider profiles via configurable Base URL, API key, model, protocol and capabilities.
 - Per-user provider switching with `/provider`.
 - Per-user custom Base URL and API key overrides with `/baseurl` and `/apikey`.
-- Provider adapter boundary for future native providers.
+- Provider adapter boundary with optional native file upload support.
 - Per-user conversation history and model selection.
 - Stable sequential user and setting numbers for admin setting-change notifications.
 - SQLite by default.
@@ -29,7 +29,7 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 
 For webhook mode, set `TELEGRAM_MODE=webhook` and provide a public HTTPS `TELEGRAM_WEBHOOK_URL`.
 
-Attachment support is provider-dependent. Images can be passed as data URLs to providers that accept OpenAI-style multimodal messages. Other files are preserved through the attachment abstraction for provider-specific adapters.
+Attachment support is provider-dependent. The generic Chat Completions protocol uses image data URLs and bounded document extraction. The `openai_responses` protocol adds native `/files` upload and `input_file` mapping for providers implementing the OpenAI Responses API.
 
 ## Multiple providers
 
