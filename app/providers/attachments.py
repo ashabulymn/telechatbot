@@ -14,9 +14,10 @@ class AttachmentMapping:
 class AttachmentAdapter:
     """Provider-neutral attachment mapper.
 
-    Native provider-specific adapters can replace this later without changing
-    Telegram handling. The default OpenAI-compatible mapping uses image data
-    URLs and text extraction for supported documents.
+    The protocol is deliberately separate from Telegram. A future native
+    provider adapter can implement file upload/transcription without changing
+    bot handlers. The current OpenAI Chat Completions adapter uses image data
+    URLs and bounded text extraction.
     """
 
     def __init__(self, parser: FileParser):
@@ -29,6 +30,7 @@ class AttachmentAdapter:
         if text:
             parts.append({"type": "text", "text": text})
 
+        remaining = self.parser.max_chars
         for item in attachments:
             if item.is_image and item.data_url():
                 parts.append({
@@ -42,9 +44,11 @@ class AttachmentAdapter:
 
             extracted = (
                 self.parser.extract(item.path, item.mime_type, item.filename)
-                if item.path else None
+                if item.path and remaining > 0 else None
             )
             if extracted:
+                extracted = extracted[:remaining]
+                remaining -= len(extracted)
                 parts.append({
                     "type": "text",
                     "text": (
@@ -65,5 +69,11 @@ class AttachmentAdapter:
                 f"[Attachment: {item.filename or item.kind}; MIME: "
                 f"{item.mime_type or 'unknown'}; size: {item.size} bytes]"
             )
+
+        if remaining <= 0 and len(attachments) > 1:
+            parts.append({
+                "type": "text",
+                "text": "\n[Attachment text truncated: aggregate prompt limit reached.]",
+            })
 
         return AttachmentMapping(parts=parts, note="\n".join(notes))
