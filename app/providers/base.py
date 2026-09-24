@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from ..attachments import Attachment
-from .attachments import AttachmentMapping, ProgressCallback
+from .attachments import AttachmentMapping, ProgressCallback, ProgressCallback
 
 
 @dataclass
