@@ -5,7 +5,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .base import AIProvider
-from .openai_compatible import OpenAICompatibleProvider\nfrom .openai_responses import OpenAIResponsesProvider
+from .openai_compatible import OpenAICompatibleProvider
+from .openai_responses import OpenAIResponsesProvider
 from .registry_types import ProviderRuntime
 from .errors import ProviderConfigurationError
 from ..config import get_settings
@@ -24,7 +25,7 @@ class ProviderProfile:
 
 class ProviderRegistry:
     SUPPORTED_PROTOCOLS = frozenset({"openai_chat_completions", "openai_responses"})
-    CAPABILITIES = frozenset({"text", "vision", "pdf", "document", "audio", "video", "file"})
+    CAPABILITIES = frozenset({"text", "vision", "pdf", "document", "audio", "video", "file", "file_cleanup"})
 
     def __init__(self):
         self.settings = get_settings()
