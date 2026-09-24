@@ -1,14 +1,17 @@
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable
 
 from ..attachments import Attachment
 from ..file_parser import FileParser
+
+ProgressCallback = Callable[[int, int, Attachment, str], Awaitable[None]]
 
 
 @dataclass(frozen=True)
 class AttachmentMapping:
     parts: list[dict[str, Any]]
     note: str
+    warnings: list[str] = field(default_factory=list)
 
 
 class AttachmentAdapter:
@@ -30,8 +33,6 @@ class AttachmentAdapter:
         if text:
             parts.append({"type": "text", "text": text})
 
-        # The parser budget is shared across all extracted attachments. Images
-        # are provider-native payloads and do not consume the text budget.
         remaining = self.parser.max_chars
         for item in attachments:
             if item.is_image and item.data_url():
