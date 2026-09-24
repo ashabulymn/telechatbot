@@ -127,6 +127,40 @@ class OpenAIResponsesProvider(AIProvider):
     def supports_native_upload(self, attachment):
         return bool(attachment.path)
 
+    async def transcribe_attachment(self, attachment):
+        if not attachment.path or attachment.kind != "audio":
+            return None
+        base, headers = self._base()
+        try:
+            with open(attachment.path, "rb") as fh:
+                files = {
+                    "file": (
+                        attachment.filename or "audio",
+                        fh,
+                        attachment.mime_type or "application/octet-stream",
+                    )
+                }
+                data = {"model": self.settings.ai_transcription_model}
+                async with httpx.AsyncClient(timeout=self.settings.ai_timeout_seconds) as client:
+                    response = await client.post(
+                        base + "/audio/transcriptions",
+                        headers=headers,
+                        data=data,
+                        files=files,
+                    )
+        except httpx.TimeoutException as exc:
+            raise ProviderError("Transkripsi audio timeout.") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError("Provider audio API tidak dapat dihubungi.") from exc
+        if response.is_error:
+            raise self._http_error(response)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ProviderError("Provider audio API mengembalikan JSON yang tidak valid.") from exc
+        text = data.get("text")
+        return str(text).strip() if text else None
+
     async def chat(self, messages, model=None):
         base, headers = self._base()
         headers["Content-Type"] = "application/json"
