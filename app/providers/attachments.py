@@ -30,6 +30,8 @@ class AttachmentAdapter:
         if text:
             parts.append({"type": "text", "text": text})
 
+        # The parser budget is shared across all extracted attachments. Images
+        # are provider-native payloads and do not consume the text budget.
         remaining = self.parser.max_chars
         for item in attachments:
             if item.is_image and item.data_url():
