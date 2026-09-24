@@ -12,6 +12,7 @@ class AttachmentMapping:
     parts: list[dict[str, Any]]
     note: str
     warnings: list[str] = field(default_factory=list)
+    remote_file_ids: list[str] = field(default_factory=list)
 
 
 class AttachmentAdapter:
