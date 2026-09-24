@@ -86,6 +86,7 @@ class OpenAIResponsesProvider(AIProvider):
         parts = [{"type": "text", "text": text}] if text else []
         notes = []
         warnings = []
+        remote_file_ids = []
         total = len(attachments)
 
         for index, item in enumerate(attachments, 1):
@@ -116,6 +117,7 @@ class OpenAIResponsesProvider(AIProvider):
 
             if file_id:
                 parts.append({"type": "input_file", "file_id": file_id})
+                remote_file_ids.append(file_id)
                 notes.append(
                     f"[Native file: {filename}; MIME: {item.mime_type or 'unknown'}]"
                 )
@@ -140,7 +142,31 @@ class OpenAIResponsesProvider(AIProvider):
             parts=parts,
             note="\n".join(notes),
             warnings=warnings,
+            remote_file_ids=remote_file_ids,
         )
+
+    async def cleanup_attachments(self, mapping):
+        if not mapping.remote_file_ids:
+            return
+        try:
+            base, headers = self._base()
+        except ProviderError:
+            return
+        async with httpx.AsyncClient(timeout=self.settings.ai_timeout_seconds) as client:
+            for file_id in mapping.remote_file_ids:
+                try:
+                    response = await client.delete(
+                        f"{base}/files/{file_id}", headers=headers
+                    )
+                    if response.is_error:
+                        log_message = f"Provider file cleanup failed: {response.status_code}"
+                        import logging
+                        logging.getLogger(__name__).warning(log_message)
+                except httpx.HTTPError:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Provider file cleanup request failed", exc_info=True
+                    )
 
     async def upload_attachment(self, attachment: Attachment):
         if not attachment.path:
