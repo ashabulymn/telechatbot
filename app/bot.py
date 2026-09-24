@@ -132,9 +132,13 @@ class BotApp:
                             transcript = None
                         if transcript:
                             transcriptions.append(
-                                f"[Transkripsi {item.filename or 'audio'}]\n{transcript}"
+                                f"[Transkripsi {item.filename or item.kind}]\n{transcript}"
                             )
-                            continue
+                            # Audio is fully represented by its transcript.
+                            # Keep video so a capable native provider can also
+                            # inspect the original video after its audio is transcribed.
+                            if item.kind == "audio":
+                                continue
                     remaining_attachments.append(item)
 
                 prepared_text = text
