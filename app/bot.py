@@ -297,7 +297,13 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
         protocol = custom["protocol"] or (profile.protocol if profile else "openai_chat_completions")
         capabilities = custom["capabilities"] or (sorted(profile.capabilities) if profile else ["text"])
-        await message.answer(f"Pengaturan AI kamu:\nProvider: {provider_name}\nProtocol: {protocol}\nBase URL: {base_url}\nAPI Key: {mask_api_key(custom['api_key'])}\nModel: {model}\nCapabilities: {", ".join(capabilities)}\n\nPerintah:\n/baseurl <URL>\n/apikey <KEY>\n/model <MODEL>\n/resetsettings")
+        await message.answer(
+            f"Pengaturan AI kamu:\nProvider: {provider_name}\nProtocol: {protocol}\n"
+            f"Base URL: {base_url}\nAPI Key: {mask_api_key(custom['api_key'])}\n"
+            f"Model: {model}\nCapabilities: {', '.join(capabilities)}\n\n"
+            "/baseurl <URL>\n/protocol <protocol>\n/capabilities <a,b,c>\n"
+            "/apikey <KEY>\n/model <MODEL>\n/resetsettings"
+        )
 
     @router.message(Command("status"))
     async def status(message: Message):
@@ -312,7 +318,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
         protocol = custom["protocol"] or (profile.protocol if profile else "openai_chat_completions")
         capabilities = custom["capabilities"] or (sorted(profile.capabilities) if profile else ["text"])
-        await message.answer(f"Provider: {provider_name}\nProtocol: {protocol}\nBase URL: {base_url}\nAPI Key: {'custom' if custom['api_key'] else 'provider/default'}\nModel: {selected}\nCapabilities: {', '.join(sorted(profile.capabilities)) if profile else 'text'}\nMode: {app.settings.telegram_mode}")
+        await message.answer(f"Provider: {provider_name}\nProtocol: {protocol}\nBase URL: {base_url}\nAPI Key: {'custom' if custom['api_key'] else 'provider/default'}\nModel: {selected}\nCapabilities: {', '.join(capabilities)}\nMode: {app.settings.telegram_mode}")
 
     @router.message(Command("clear"))
     async def clear(message: Message):
