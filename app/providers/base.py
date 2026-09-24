@@ -61,6 +61,9 @@ class AIProvider(ABC):
         """
         return None
 
+    def attachment_mode(self, attachment: Attachment) -> str:
+        return "auto"
+
     def supports_native_upload(self, attachment: Attachment) -> bool:
         return False
 
