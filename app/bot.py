@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from urllib.parse import urlparse
 
@@ -57,6 +58,10 @@ class BotApp:
         # Short-lived cache prevents repeated /models calls on every message.
         self._model_info_cache = {}
         self._model_info_cache_ttl = 300.0
+
+    def _model_cache_key(self, uid, provider_name, base_url, protocol, api_key):
+        key_fingerprint = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
+        return (uid, provider_name, base_url, protocol, key_fingerprint)
 
     async def notify_admin(self, user_id, action, value, message=None):
         user_number = await self.db.ensure_user(
@@ -131,7 +136,7 @@ class BotApp:
                 model_info = None
                 try:
                     import time
-                    cache_key = (uid, provider_name, base_url, protocol, bool(api_key))
+                    cache_key = self._model_cache_key(uid, provider_name, base_url, protocol, api_key)
                     cached = self._model_info_cache.get(cache_key)
                     now = time.monotonic()
                     if cached and now - cached["at"] < self._model_info_cache_ttl:
@@ -421,29 +426,38 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         await app.notify_admin(message.from_user.id, "PROVIDER", value, message)
         await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
 
-    async def _discover_models(uid):
-        provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
-        profile = app.providers.profile(provider_name)
-        custom = await app.db.get_custom_settings(uid)
-        provider = app.providers.provider(provider_name, base_url_override=custom["base_url"] or None, api_key_override=custom["api_key"] or None, protocol_override=custom["protocol"] or None, capabilities_override=custom["capabilities"] or None)
-        available = await provider.list_models()
-        current = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model
-        return provider_name, available, current
-
     async def _discover_model_info(uid):
         provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
         profile = app.providers.profile(provider_name)
         custom = await app.db.get_custom_settings(uid)
-        provider = app.providers.provider(
-            provider_name,
-            base_url_override=custom["base_url"] or None,
-            api_key_override=custom["api_key"] or None,
-            protocol_override=custom["protocol"] or None,
-            capabilities_override=custom["capabilities"] or None,
-        )
-        available = await provider.list_model_info()
+        base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
+        api_key = custom["api_key"] or (profile.api_key if profile else "")
+        protocol = custom["protocol"] or (profile.protocol if profile else "openai_chat_completions")
+        cache_key = app._model_cache_key(uid, provider_name, base_url, protocol, api_key)
+        import time
+        now = time.monotonic()
+        cached = app._model_info_cache.get(cache_key)
+        if cached and now - cached["at"] < app._model_info_cache_ttl:
+            available = cached["models"]
+        else:
+            provider = app.providers.provider(
+                provider_name,
+                base_url_override=custom["base_url"] or None,
+                api_key_override=custom["api_key"] or None,
+                protocol_override=custom["protocol"] or None,
+                capabilities_override=custom["capabilities"] or None,
+            )
+            available = await provider.list_model_info()
+            app._model_info_cache[cache_key] = {"at": now, "models": available}
+            if len(app._model_info_cache) > 100:
+                oldest = min(app._model_info_cache, key=lambda key: app._model_info_cache[key]["at"])
+                app._model_info_cache.pop(oldest, None)
         current = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model
         return provider_name, available, current
+
+    async def _discover_models(uid):
+        provider_name, info, current = await _discover_model_info(uid)
+        return provider_name, [item.id for item in info], current
 
     @router.message(Command("models"))
     async def models(message: Message):
