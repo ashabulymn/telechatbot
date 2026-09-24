@@ -1,0 +1,150 @@
+import json
+
+import pytest
+
+from app.config import get_settings
+from app.providers.errors import ProviderConfigurationError
+from app.providers.openai_responses import OpenAIResponsesProvider
+from app.providers.registry import ProviderRegistry
+from app.providers.registry_types import ProviderRuntime
+
+
+def _reset_settings(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
+    get_settings.cache_clear()
+
+
+def test_registry_parses_attachment_modes(monkeypatch):
+    _reset_settings(monkeypatch)
+    monkeypatch.setenv(
+        "AI_PROVIDERS_JSON",
+        json.dumps(
+            {
+                "responses": {
+                    "protocol": "openai_responses",
+                    "base_url": "https://example.com/v1",
+                    "api_key": "key",
+                    "default_model": "model",
+                    "capabilities": ["text", "file", "transcription"],
+                    "attachment_modes": {
+                        "document": "native",
+                        "audio": "transcribe",
+                        "image": "fallback",
+                        "video": "disabled",
+                    },
+                }
+            }
+        ),
+    )
+
+    registry = ProviderRegistry()
+    profile = registry.profile("responses")
+
+    assert profile is not None
+    assert profile.attachment_modes == {
+        "document": "native",
+        "audio": "transcribe",
+        "image": "fallback",
+        "video": "disabled",
+    }
+
+    provider = registry.provider("responses")
+    assert provider.attachment_mode(
+        type("Item", (), {"kind": "audio"})()
+    ) == "transcribe"
+
+
+@pytest.mark.parametrize("mode", ["unknown", "", "NATIVE "])
+def test_registry_rejects_invalid_attachment_mode(monkeypatch, mode):
+    _reset_settings(monkeypatch)
+    monkeypatch.setenv(
+        "AI_PROVIDERS_JSON",
+        json.dumps(
+            {
+                "custom": {
+                    "base_url": "https://example.com/v1",
+                    "api_key": "key",
+                    "default_model": "model",
+                    "attachment_modes": {"document": mode},
+                }
+            }
+        ),
+    )
+
+    with pytest.raises(ProviderConfigurationError):
+        ProviderRegistry()
+
+
+def test_responses_provider_attachment_mode_defaults_to_auto():
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file", "transcription"}),
+        )
+    )
+
+    item = type("Item", (), {"kind": "document"})()
+    assert provider.attachment_mode(item) == "auto"
+
+
+def test_responses_provider_modes_control_native_and_transcription(tmp_path):
+    from app.attachments import Attachment
+
+    path = tmp_path / "voice.ogg"
+    path.write_bytes(b"audio")
+
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file", "audio", "transcription"}),
+            attachment_modes={"audio": "transcribe"},
+        )
+    )
+
+    item = Attachment(
+        kind="audio",
+        file_id="audio-1",
+        filename="voice.ogg",
+        mime_type="audio/ogg",
+        path=str(path),
+    )
+
+    assert provider.attachment_mode(item) == "transcribe"
+    assert provider.supports_native_upload(item) is False
+    assert provider.supports_transcription(item) is True
+
+
+def test_responses_provider_disabled_mode_blocks_both_paths(tmp_path):
+    from app.attachments import Attachment
+
+    path = tmp_path / "note.txt"
+    path.write_text("hello", encoding="utf-8")
+
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file", "transcription"}),
+            attachment_modes={"document": "disabled"},
+        )
+    )
+
+    item = Attachment(
+        kind="document",
+        file_id="doc-1",
+        filename="note.txt",
+        mime_type="text/plain",
+        path=str(path),
+    )
+
+    assert provider.attachment_mode(item) == "disabled"
+    assert provider.supports_native_upload(item) is False
+    assert provider.supports_transcription(item) is False
