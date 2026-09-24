@@ -102,6 +102,9 @@ class OpenAICompatibleProvider(AIProvider):
             if not isinstance(item, dict) or not item.get("id"):
                 continue
             caps = set()
+            capabilities_known = isinstance(item.get("capabilities"), dict) or any(
+                isinstance(item.get(key), (list, tuple)) for key in ("modalities", "input_modalities", "inputModalities")
+            )
             raw = item.get("capabilities") or {}
             if isinstance(raw, dict):
                 for key, value in raw.items():
@@ -115,7 +118,7 @@ class OpenAICompatibleProvider(AIProvider):
                         value = str(value).lower()
                         if value in {"image", "vision"}: caps.add("vision")
                         elif value in {"audio", "video", "file", "pdf", "document"}: caps.add("file" if value in {"file","pdf","document"} else value)
-            result.append(ModelInfo(id=str(item["id"]), capabilities=frozenset(caps), display_name=str(item.get("name") or item.get("display_name") or "")))
+            result.append(ModelInfo(id=str(item["id"]), capabilities=frozenset(caps), display_name=str(item.get("name") or item.get("display_name") or ""), capabilities_known=capabilities_known))
         return sorted({item.id: item for item in result}.values(), key=lambda item: item.id)
 
     async def chat(self, messages, model=None):
