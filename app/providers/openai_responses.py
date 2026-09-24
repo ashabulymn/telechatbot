@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -13,6 +14,9 @@ from .attachments import AttachmentMapping, ProgressCallback
 from .base import AIProvider, ProviderResponse
 from .errors import ProviderConfigurationError, ProviderError
 from .registry_types import ProviderRuntime
+
+
+log = logging.getLogger(__name__)
 
 
 class OpenAIResponsesProvider(AIProvider):
@@ -146,7 +150,7 @@ class OpenAIResponsesProvider(AIProvider):
         )
 
     async def cleanup_attachments(self, mapping):
-        if not mapping.remote_file_ids:
+        if not mapping.remote_file_ids or "file_cleanup" not in self.runtime.capabilities:
             return
         try:
             base, headers = self._base()
@@ -206,7 +210,13 @@ class OpenAIResponsesProvider(AIProvider):
         return str(file_id)
 
     def supports_native_upload(self, attachment):
-        return bool(attachment.path and "file" in self.runtime.capabilities)
+        if not attachment.path or "file" not in self.runtime.capabilities:
+            return False
+        if attachment.kind == "audio":
+            return "audio" in self.runtime.capabilities
+        if attachment.kind == "video":
+            return "video" in self.runtime.capabilities
+        return True
 
     async def transcribe_attachment(self, attachment):
         if not attachment.path or attachment.kind not in {"audio", "video"}:
