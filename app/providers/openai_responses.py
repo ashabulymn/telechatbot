@@ -85,7 +85,7 @@ class OpenAIResponsesProvider(AIProvider):
                 parts.append({"type": "image_url", "image_url": {"url": item.data_url()}})
                 notes.append(f"[Image: {item.filename}; MIME: {item.mime_type}; size: {item.size} bytes]")
                 continue
-            file_id = await self.upload_attachment(item)
+            file_id = await self.upload_attachment(item) if self.supports_native_upload(item) else None
             if file_id:
                 parts.append({"type": "input_file", "file_id": file_id})
                 notes.append(f"[Native file: {item.filename or item.kind}; MIME: {item.mime_type or 'unknown'}]")
