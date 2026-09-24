@@ -46,3 +46,7 @@ class AIProvider(ABC):
 
     def supports_native_upload(self, attachment: Attachment) -> bool:
         return False
+
+    async def transcribe_attachment(self, attachment: Attachment) -> str | None:
+        """Optional native speech-to-text hook for audio/voice attachments."""
+        return None
