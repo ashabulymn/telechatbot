@@ -59,6 +59,7 @@ def test_provider_native_upload_hook_defaults_to_unsupported(tmp_path):
     )
     provider = DummyProvider()
     assert provider.supports_native_upload(item) is False
+    assert provider.supports_transcription(item) is False
 
 
 def test_audio_attachment_is_classified_as_audio():
@@ -179,7 +180,7 @@ async def test_responses_provider_cleanup_deletes_remote_files(monkeypatch):
             base_url="https://example.com/v1",
             api_key="key",
             default_model="model",
-            capabilities=frozenset({"text", "file"}),
+            capabilities=frozenset({"text", "file", "file_cleanup"}),
         )
     )
 
