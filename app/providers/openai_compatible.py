@@ -41,6 +41,38 @@ class OpenAICompatibleProvider(AIProvider):
         payload["stream"] = bool(stream)
         return url, headers, payload
 
+    async def list_models(self) -> list[str]:
+        if not self.runtime.api_key:
+            raise ProviderConfigurationError("API key provider belum dikonfigurasi.")
+        base_url = self.runtime.base_url.strip().rstrip("/")
+        parsed = urlparse(base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ProviderConfigurationError("Base URL provider tidak valid.")
+        try:
+            async with httpx.AsyncClient(timeout=self.settings.ai_timeout_seconds) as client:
+                response = await client.get(
+                    base_url + "/models",
+                    headers={"Authorization": f"Bearer {self.runtime.api_key}"},
+                )
+        except httpx.TimeoutException as exc:
+            raise ProviderError("Daftar model provider timeout.") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError("Provider model tidak dapat dihubungi.") from exc
+        if response.is_error:
+            raise self._http_error(response)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ProviderError("Provider model mengembalikan JSON yang tidak valid.") from exc
+        models = data.get("data") or data.get("models") or []
+        result = []
+        for item in models:
+            if isinstance(item, str):
+                result.append(item)
+            elif isinstance(item, dict) and item.get("id"):
+                result.append(str(item["id"]))
+        return sorted(set(result))
+
     async def chat(self, messages, model=None):
         url, headers, payload = self._request(messages, model)
         try:
