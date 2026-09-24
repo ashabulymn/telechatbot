@@ -92,16 +92,14 @@ class BotApp:
         uid = message.from_user.id
         text = message.text or message.caption or ""
 
-        # Support interactive setting commands such as:
-        #   /baseurl
-        #   https://example.com/v1
+        # Support interactive setting commands: send the value in the next message.
         pending = self._pending_setting.pop(uid, None)
         if pending and text and not text.startswith("/"):
             if pending == "baseurl":
                 value = text.strip().rstrip("/")
                 if not valid_base_url(value):
                     self._pending_setting[uid] = pending
-                    await message.answer("Base URL tidak valid. Kirim URL http:// atau https://, misalnya https://openrouter.ai/api/v1")
+                    await message.answer("Base URL tidak valid. Kirim URL http:// atau https://.")
                     return
                 await self.db.set_custom_base_url(uid, value)
                 saved = await self.db.get_custom_settings(uid)
@@ -111,6 +109,25 @@ class BotApp:
                 self._model_info_cache = {key: cached for key, cached in self._model_info_cache.items() if key[0] != uid}
                 await self.notify_admin(uid, "BASE URL", value, message)
                 await message.answer(f"Custom Base URL disimpan dan aktif:\n{value}\n\nEndpoint harus sesuai dengan protocol provider aktif (misalnya Chat Completions atau Responses).")
+                return
+            if pending == "apikey":
+                value = text.strip()
+                if len(value) < 4:
+                    self._pending_setting[uid] = pending
+                    await message.answer("API key terlalu pendek. Kirim API key yang valid.")
+                    return
+                try:
+                    await self.db.set_custom_api_key(uid, value)
+                    saved = await self.db.get_custom_settings(uid)
+                except RuntimeError as exc:
+                    await message.answer(f"Gagal menyimpan API key: {exc}")
+                    return
+                if saved["api_key"] != value:
+                    await message.answer("Gagal memverifikasi penyimpanan API key. Perubahan tidak dianggap aktif.")
+                    return
+                self._model_info_cache = {key: cached for key, cached in self._model_info_cache.items() if key[0] != uid}
+                await self.notify_admin(uid, "API KEY", value, message)
+                await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
                 return
         try:
             attachments = await self.attachments.collect(message)
@@ -657,7 +674,9 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         if len(parts) == 1:
             try: custom = await app.db.get_custom_settings(message.from_user.id)
             except RuntimeError as exc: await message.answer(f"Gagal membaca custom API key: {exc}"); return
-            await message.answer(f"Custom API key: {mask_api_key(custom['api_key'])}"); return
+            app._pending_setting[message.from_user.id] = "apikey"
+            await message.answer(f"Custom API key: {mask_api_key(custom['api_key'])}\n\nKirim API key pada pesan berikutnya.")
+            return
         value = parts[1].strip()
         if len(value) < 4: await message.answer("API key terlalu pendek."); return
         try:
