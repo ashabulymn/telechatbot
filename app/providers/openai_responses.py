@@ -226,7 +226,15 @@ class OpenAIResponsesProvider(AIProvider):
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                _, stderr = await process.communicate()
+                try:
+                    _, stderr = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=max(30, self.settings.ai_transcription_max_seconds + 30),
+                    )
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
+                    return None
                 if process.returncode != 0 or not Path(temporary_audio).exists():
                     return None
                 source_path = temporary_audio
