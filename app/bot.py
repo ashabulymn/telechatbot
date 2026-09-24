@@ -32,7 +32,7 @@ def mask_api_key(value):
 def model_keyboard(models, current=None, page=0, per_page=8):
     start = page * per_page
     page_models = models[start:start + per_page]
-    rows = [[InlineKeyboardButton(text=(('✓ ' if name == current else '') + name[:60]), callback_data='setmodel:' + name)] for name in page_models]
+    rows = [[InlineKeyboardButton(text=(('✓ ' if name == current else '') + name[:60]), callback_data='setmodel:' + str(start + i))] for i, name in enumerate(page_models)]
     nav = []
     if page > 0: nav.append(InlineKeyboardButton(text='← Sebelumnya', callback_data='modelpage:' + str(page - 1)))
     if start + per_page < len(models): nav.append(InlineKeyboardButton(text='Berikutnya →', callback_data='modelpage:' + str(page + 1)))
@@ -383,8 +383,15 @@ def register_handlers(dp: Dispatcher, app: BotApp):
     @router.callback_query(F.data.startswith("setmodel:"))
     async def set_model_callback(callback: CallbackQuery):
         if not callback.from_user: return
-        value = (callback.data or "").split(":", 1)[1].strip()
-        if not value: await callback.answer("Model tidak valid.", show_alert=True); return
+        raw_index = (callback.data or "").split(":", 1)[1].strip()
+        try: index = int(raw_index)
+        except ValueError: await callback.answer("Model tidak valid.", show_alert=True); return
+        try:
+            _, available, _ = await _discover_models(callback.from_user.id)
+        except Exception:
+            await callback.answer("Gagal memuat model.", show_alert=True); return
+        if index < 0 or index >= len(available): await callback.answer("Model sudah tidak tersedia.", show_alert=True); return
+        value = available[index]
         await app.db.set_model(callback.from_user.id, value)
         await app.notify_admin(callback.from_user.id, "MODEL", value, None)
         await callback.answer("Model diaktifkan.")
