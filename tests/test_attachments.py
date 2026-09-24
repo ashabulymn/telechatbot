@@ -1,4 +1,5 @@
-import pytest\nfrom pathlib import Path
+import pytest
+from pathlib import Path
 
 from app.attachments import Attachment
 from app.file_parser import FileParser
