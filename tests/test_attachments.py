@@ -70,3 +70,16 @@ def test_audio_attachment_is_classified_as_audio():
     )
     assert item.kind == "audio"
     assert not item.is_image
+
+
+def test_provider_runtime_capabilities_are_preserved():
+    from app.providers.registry_types import ProviderRuntime
+
+    runtime = ProviderRuntime(
+        name="x",
+        base_url="https://example.com/v1",
+        api_key="key",
+        default_model="model",
+        capabilities=frozenset({"text", "file"}),
+    )
+    assert "file" in runtime.capabilities
