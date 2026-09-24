@@ -143,7 +143,6 @@ class OpenAIResponsesProvider(AIProvider):
                     notes.append(
                         f"[Native file: {filename}; MIME: {item.mime_type or 'unknown'}]"
                     )
-                    routing.append(f"{filename}: native")
                     if progress:
                         await progress(index, total, item, "ready")
                     continue
