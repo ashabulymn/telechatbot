@@ -559,8 +559,16 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         value = parts[1].strip().rstrip("/")
         if not valid_base_url(value): await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1"); return
         await app.db.set_custom_base_url(message.from_user.id, value)
+        saved = await app.db.get_custom_settings(message.from_user.id)
+        if saved["base_url"] != value:
+            await message.answer("Gagal memverifikasi penyimpanan Custom Base URL. Perubahan tidak dianggap aktif.")
+            return
+        app._model_info_cache = {
+            key: cached for key, cached in app._model_info_cache.items()
+            if key[0] != message.from_user.id
+        }
         await app.notify_admin(message.from_user.id, "BASE URL", value, message)
-        await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus sesuai dengan protocol provider aktif (misalnya Chat Completions atau Responses).")
+        await message.answer(f"Custom Base URL disimpan dan aktif:\n{value}\n\nEndpoint harus sesuai dengan protocol provider aktif (misalnya Chat Completions atau Responses).")
 
     @router.message(Command("protocol"))
     async def protocol(message: Message):
@@ -577,6 +585,14 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             await message.answer("Protocol tidak didukung. Tersedia: " + ", ".join(sorted(app.providers.SUPPORTED_PROTOCOLS)))
             return
         await app.db.set_custom_protocol(message.from_user.id, value)
+        saved = await app.db.get_custom_settings(message.from_user.id)
+        if saved["protocol"] != value:
+            await message.answer("Gagal memverifikasi penyimpanan protocol.")
+            return
+        app._model_info_cache = {
+            key: cached for key, cached in app._model_info_cache.items()
+            if key[0] != message.from_user.id
+        }
         await app.notify_admin(message.from_user.id, "PROTOCOL", value, message)
         await message.answer("Custom protocol disimpan: " + value)
 
@@ -596,9 +612,18 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         if unknown or not values:
             await message.answer("Capability tidak valid: " + ", ".join(unknown or ["kosong"]) + "\nTersedia: " + ", ".join(sorted(app.providers.CAPABILITIES)))
             return
-        await app.db.set_custom_capabilities(message.from_user.id, values)
-        await app.notify_admin(message.from_user.id, "CAPABILITIES", ", ".join(sorted(set(values))), message)
-        await message.answer("Custom capabilities disimpan: " + ", ".join(sorted(set(values))))
+        normalized = sorted(set(values))
+        await app.db.set_custom_capabilities(message.from_user.id, normalized)
+        saved = await app.db.get_custom_settings(message.from_user.id)
+        if sorted(saved["capabilities"] or []) != normalized:
+            await message.answer("Gagal memverifikasi penyimpanan capabilities.")
+            return
+        app._model_info_cache = {
+            key: cached for key, cached in app._model_info_cache.items()
+            if key[0] != message.from_user.id
+        }
+        await app.notify_admin(message.from_user.id, "CAPABILITIES", ", ".join(normalized), message)
+        await message.answer("Custom capabilities disimpan: " + ", ".join(normalized))
     @router.message(Command("apikey"))
     async def apikey(message: Message):
         if not message.from_user: return
@@ -609,8 +634,19 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             await message.answer(f"Custom API key: {mask_api_key(custom['api_key'])}"); return
         value = parts[1].strip()
         if len(value) < 4: await message.answer("API key terlalu pendek."); return
-        try: await app.db.set_custom_api_key(message.from_user.id, value)
-        except RuntimeError as exc: await message.answer(f"Gagal menyimpan API key: {exc}"); return
+        try:
+            await app.db.set_custom_api_key(message.from_user.id, value)
+            saved = await app.db.get_custom_settings(message.from_user.id)
+        except RuntimeError as exc:
+            await message.answer(f"Gagal menyimpan API key: {exc}")
+            return
+        if saved["api_key"] != value:
+            await message.answer("Gagal memverifikasi penyimpanan API key. Perubahan tidak dianggap aktif.")
+            return
+        app._model_info_cache = {
+            key: cached for key, cached in app._model_info_cache.items()
+            if key[0] != message.from_user.id
+        }
         await app.notify_admin(message.from_user.id, "API KEY", value, message)
         await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
 
@@ -618,6 +654,10 @@ def register_handlers(dp: Dispatcher, app: BotApp):
     async def resetsettings(message: Message):
         if message.from_user:
             await app.db.clear_custom_settings(message.from_user.id)
+            app._model_info_cache = {
+                key: cached for key, cached in app._model_info_cache.items()
+                if key[0] != message.from_user.id
+            }
             await app.notify_admin(message.from_user.id, "RESET CUSTOM SETTINGS", "Base URL & API key dihapus", message)
         await message.answer("Custom Base URL dan API key dihapus. Provider dan model tetap.")
 
