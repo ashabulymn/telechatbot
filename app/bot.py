@@ -112,7 +112,7 @@ class BotApp:
                     base_url_override=base_url,
                     api_key_override=api_key,
                 )
-                mapping = provider.map_attachments(attachments, text)
+                mapping = await provider.prepare_attachments(attachments, text)
                 content = mapping.parts or text
                 attachment_note = mapping.note
                 await self.db.add_message(uid, "user", text or attachment_note or "[attachment]")
