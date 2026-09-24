@@ -131,6 +131,17 @@ class BotApp:
         await send_long_message(message, result.text)
 
 def register_handlers(dp: Dispatcher, app: BotApp):
+    @router.message.middleware()
+    async def register_user_middleware(handler, event, data):
+        if event.from_user:
+            await app.db.ensure_user(
+                event.from_user.id,
+                username=event.from_user.username,
+                first_name=event.from_user.first_name,
+                last_name=event.from_user.last_name,
+            )
+        return await handler(event, data)
+
     @router.message(Command("start"))
     async def start(message: Message):
         await message.answer(
