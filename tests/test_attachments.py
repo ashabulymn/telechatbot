@@ -275,6 +275,7 @@ async def test_responses_provider_cleans_remote_files_when_preparation_aborts(tm
 async def test_responses_provider_transcribes_media_when_native_upload_fails(tmp_path, monkeypatch):
     from app.providers.openai_responses import OpenAIResponsesProvider
     from app.providers.registry_types import ProviderRuntime
+    from app.providers.errors import ProviderError
     from app.attachments import Attachment
 
     path = tmp_path / "voice.ogg"
