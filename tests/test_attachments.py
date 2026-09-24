@@ -154,3 +154,14 @@ async def test_responses_provider_native_upload_error_falls_back(tmp_path, monke
     assert mapped.warnings
     assert "upload native gagal" in mapped.warnings[0]
     assert events == ["preparing", "uploading", "fallback", "ready"]
+
+
+def test_mapping_tracks_remote_file_ids():
+    from app.providers.attachments import AttachmentMapping
+
+    mapping = AttachmentMapping(
+        parts=[],
+        note="",
+        remote_file_ids=["file_1", "file_2"],
+    )
+    assert mapping.remote_file_ids == ["file_1", "file_2"]
