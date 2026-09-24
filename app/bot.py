@@ -98,6 +98,11 @@ class BotApp:
                 base_url = custom["base_url"] or profile.base_url
                 api_key = custom["api_key"] or profile.api_key
 
+                if any(provider.attachment_mode(item) == "disabled" for item in attachments):
+                    disabled = [item.filename or item.kind for item in attachments if provider.attachment_mode(item) == "disabled"]
+                    await message.answer("Provider ini menonaktifkan lampiran: " + ", ".join(disabled[:5]))
+                    return
+
                 # Images require a vision-capable provider because the fallback
                 # representation cannot turn pixels into useful text. Other files
                 # can fall back to bounded extraction/metadata when native support
@@ -142,7 +147,7 @@ class BotApp:
                 transcriptions = []
                 remaining_attachments = []
                 for item in attachments:
-                    if item.kind in {"audio", "video"} and provider.supports_transcription(item):
+                    if item.kind in {"audio", "video"} and provider.attachment_mode(item) != "disabled" and provider.supports_transcription(item):
                         try:
                             transcript = await provider.transcribe_attachment(item)
                         except ProviderError as exc:
