@@ -83,3 +83,74 @@ def test_provider_runtime_capabilities_are_preserved():
         capabilities=frozenset({"text", "file"}),
     )
     assert "file" in runtime.capabilities
+
+
+@pytest.mark.asyncio
+async def test_base_prepare_attachments_reports_progress(tmp_path):
+    from app.providers.base import AIProvider
+
+    path = tmp_path / "note.txt"
+    path.write_text("hello", encoding="utf-8")
+    item = Attachment(
+        kind="document",
+        file_id="1",
+        filename="note.txt",
+        mime_type="text/plain",
+        path=str(path),
+    )
+    events = []
+
+    class DummyProvider(AIProvider):
+        async def chat(self, messages, model=None):
+            raise NotImplementedError
+
+    async def progress(index, total, attachment, state):
+        events.append((index, total, attachment.filename, state))
+
+    mapped = await DummyProvider().prepare_attachments([item], progress=progress)
+
+    assert mapped.parts
+    assert events == [(1, 1, "note.txt", "preparing")]
+
+
+@pytest.mark.asyncio
+async def test_responses_provider_native_upload_error_falls_back(tmp_path, monkeypatch):
+    from app.providers.openai_responses import OpenAIResponsesProvider
+    from app.providers.registry_types import ProviderRuntime
+    from app.providers.errors import ProviderError
+
+    path = tmp_path / "note.txt"
+    path.write_text("fallback text", encoding="utf-8")
+    item = Attachment(
+        kind="document",
+        file_id="1",
+        filename="note.txt",
+        mime_type="text/plain",
+        path=str(path),
+    )
+
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file"}),
+        )
+    )
+
+    async def fail_upload(attachment):
+        raise ProviderError("simulated upload failure")
+
+    monkeypatch.setattr(provider, "upload_attachment", fail_upload)
+    events = []
+
+    async def progress(index, total, attachment, state):
+        events.append(state)
+
+    mapped = await provider.prepare_attachments([item], progress=progress)
+
+    assert "fallback text" in mapped.parts[-1]["text"]
+    assert mapped.warnings
+    assert "upload native gagal" in mapped.warnings[0]
+    assert events == ["preparing", "uploading", "fallback", "ready"]
