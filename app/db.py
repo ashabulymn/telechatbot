@@ -52,5 +52,5 @@ class Database:
 
     async def set_provider(self,user_id,provider):
         async with aiosqlite.connect(self.path) as db:
-            await db.execute("INSERT INTO user_settings(telegram_user_id,provider) VALUES (?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET provider=excluded.provider,updated_at=CURRENT_TIMESTAMP",(user_id,provider))
+            await db.execute("INSERT INTO user_settings(telegram_user_id,provider,model) VALUES (?,?,NULL) ON CONFLICT(telegram_user_id) DO UPDATE SET provider=excluded.provider,model=NULL,updated_at=CURRENT_TIMESTAMP",(user_id,provider))
             await db.commit()
