@@ -7,7 +7,7 @@ import httpx
 
 from ..attachments import Attachment
 from .attachments import AttachmentMapping
-from .base import AIProvider, ProviderResponse
+from .base import AIProvider, ModelInfo, ProviderResponse
 from .errors import ProviderConfigurationError, ProviderError
 from .registry_types import ProviderRuntime
 
@@ -111,6 +111,30 @@ class AnthropicMessagesProvider(AIProvider):
             raise ProviderError("Provider model mengembalikan JSON yang tidak valid.") from exc
         models = data.get("data") or []
         return sorted({str(item["id"]) for item in models if isinstance(item, dict) and item.get("id")})
+
+    async def list_model_info(self) -> list[ModelInfo]:
+        if not self.runtime.api_key:
+            raise ProviderConfigurationError("API key provider belum dikonfigurasi.")
+        base = self.runtime.base_url.strip().rstrip("/")
+        url = base + ("/models" if base.endswith("/v1") else "/v1/models")
+        try:
+            async with httpx.AsyncClient(timeout=self.settings.ai_timeout_seconds) as client:
+                response = await client.get(url, headers={"x-api-key": self.runtime.api_key, "anthropic-version": self.API_VERSION})
+        except httpx.TimeoutException as exc:
+            raise ProviderError("Daftar model provider timeout.") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError("Provider model tidak dapat dihubungi.") from exc
+        if response.is_error:
+            raise self._http_error(response)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ProviderError("Provider model mengembalikan JSON yang tidak valid.") from exc
+        return sorted(
+            [ModelInfo(id=str(item["id"]), display_name=str(item.get("display_name") or ""))
+             for item in data.get("data") or [] if isinstance(item, dict) and item.get("id")],
+            key=lambda item: item.id,
+        )
 
     async def chat(self, messages, model=None):
         url, headers, payload = self._request(messages, model)
