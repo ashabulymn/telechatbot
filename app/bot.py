@@ -102,12 +102,17 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("status"))
     async def status(message: Message):
-        model = await app.db.get_model(message.from_user.id) if message.from_user else None
-        selected = model or app.settings.ai_model or "(belum diset)"
+        if not message.from_user:
+            return
+        model = await app.db.get_model(message.from_user.id)
+        provider_name = await app.db.get_provider(message.from_user.id)
+        profile = app.providers.profile(provider_name)
+        selected = model or (profile.default_model if profile else "") or app.settings.ai_model or "(belum diset)"
         await message.answer(
-            f"Provider: OpenAI-compatible\n"
-            f"Base URL: {app.settings.ai_base_url}\n"
+            f"Provider: {provider_name or app.settings.ai_default_provider}\n"
+            f"Base URL: {(profile.base_url if profile else app.settings.ai_base_url)}\n"
             f"Model: {selected}\n"
+            f"Capabilities: {', '.join(sorted(profile.capabilities)) if profile else 'text'}\n"
             f"Mode: {app.settings.telegram_mode}"
         )
 
