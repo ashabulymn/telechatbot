@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     telegram_webhook_secret: str | None = None
     telegram_webhook_host: str = "0.0.0.0"
     telegram_webhook_port: int = 8080
+    admin_telegram_user_id: int | None = None
 
     ai_base_url: str = "https://api.openai.com/v1"
     ai_api_key: str = ""
