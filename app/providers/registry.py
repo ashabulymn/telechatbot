@@ -112,21 +112,22 @@ class ProviderRegistry:
     def get(self, name):
         return self._profiles.get(name)
 
-    def provider(self, name=None, base_url_override=None, api_key_override=None) -> AIProvider:
+    def provider(self, name=None, base_url_override=None, api_key_override=None, protocol_override=None, capabilities_override=None) -> AIProvider:
         selected = name or self.settings.ai_default_provider
         profile = self._profiles.get(selected)
         if not profile:
             raise ProviderConfigurationError(f"Provider '{selected}' tidak ditemukan.")
-        if profile.protocol not in self.SUPPORTED_PROTOCOLS:
-            raise ProviderConfigurationError(f"Protocol provider '{profile.protocol}' belum didukung.")
+        protocol = protocol_override or profile.protocol
+        if protocol not in self.SUPPORTED_PROTOCOLS:
+            raise ProviderConfigurationError(f"Protocol provider '{protocol}' belum didukung.")
         runtime = ProviderRuntime(
             name=profile.name, base_url=base_url_override or profile.base_url,
             api_key=api_key_override or profile.api_key,
             default_model=profile.default_model, extra_body=profile.extra_body,
-            capabilities=profile.capabilities,
+            capabilities=frozenset(capabilities_override) if capabilities_override is not None else profile.capabilities,
             attachment_modes=profile.attachment_modes,
         )
-        if profile.protocol == "openai_responses":
+        if protocol == "openai_responses":
             return OpenAIResponsesProvider(runtime)
         return OpenAICompatibleProvider(runtime)
 
