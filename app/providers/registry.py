@@ -21,11 +21,13 @@ class ProviderProfile:
     default_model: str = ""
     extra_body: dict[str, Any] = field(default_factory=dict)
     capabilities: frozenset[str] = frozenset({"text"})
+    attachment_modes: dict[str, str] = field(default_factory=dict)
 
 
 class ProviderRegistry:
     SUPPORTED_PROTOCOLS = frozenset({"openai_chat_completions", "openai_responses"})
     CAPABILITIES = frozenset({"text", "vision", "pdf", "document", "audio", "video", "file", "file_cleanup", "transcription"})
+    ATTACHMENT_MODES = frozenset({"auto", "native", "transcribe", "fallback", "disabled"})
 
     def __init__(self):
         self.settings = get_settings()
@@ -37,7 +39,7 @@ class ProviderRegistry:
             return {"default": ProviderProfile(
                 name="default", base_url=self.settings.ai_base_url,
                 api_key=self.settings.ai_api_key, default_model=self.settings.ai_model,
-                extra_body=self._extra_body(), capabilities=frozenset({"text", "vision"})
+                extra_body=self._extra_body(), capabilities=frozenset({"text", "vision"}), attachment_modes={}
             )}
 
         try:
@@ -65,6 +67,18 @@ class ProviderRegistry:
                 raise ProviderConfigurationError(
                     f"Capability provider '{name}' tidak dikenal: {', '.join(sorted(unknown))}."
                 )
+            raw_modes = cfg.get("attachment_modes", {})
+            if not isinstance(raw_modes, dict):
+                raise ProviderConfigurationError(f"attachment_modes provider '{name}' harus berupa object.")
+            attachment_modes = {}
+            for kind, mode in raw_modes.items():
+                kind = str(kind).strip().lower()
+                mode = str(mode).strip().lower()
+                if not kind or mode not in self.ATTACHMENT_MODES:
+                    raise ProviderConfigurationError(
+                        f"attachment_modes provider '{name}' tidak valid untuk '{kind}'."
+                    )
+                attachment_modes[kind] = mode
             profiles[name] = ProviderProfile(
                 name=name, protocol=protocol,
                 base_url=str(cfg.get("base_url", "")).strip(),
@@ -72,6 +86,7 @@ class ProviderRegistry:
                 default_model=str(cfg.get("default_model", "")).strip(),
                 extra_body=cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else {},
                 capabilities=capabilities,
+                attachment_modes=attachment_modes,
             )
         if not profiles:
             raise ProviderConfigurationError("AI_PROVIDERS_JSON tidak memiliki provider yang valid.")
@@ -109,6 +124,7 @@ class ProviderRegistry:
             api_key=api_key_override or profile.api_key,
             default_model=profile.default_model, extra_body=profile.extra_body,
             capabilities=profile.capabilities,
+            attachment_modes=profile.attachment_modes,
         )
         if profile.protocol == "openai_responses":
             return OpenAIResponsesProvider(runtime)
