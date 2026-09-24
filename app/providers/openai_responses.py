@@ -230,6 +230,15 @@ class OpenAIResponsesProvider(AIProvider):
             return False
         if not attachment.path or "file" not in self.runtime.capabilities:
             return False
+        if self.runtime.model_capabilities_known:
+            if attachment.is_image and "vision" not in self.runtime.model_capabilities:
+                return False
+            if attachment.kind == "audio" and "audio" not in self.runtime.model_capabilities:
+                return False
+            if attachment.kind == "video" and "video" not in self.runtime.model_capabilities:
+                return False
+            if attachment.kind in {"document", "pdf"} and "file" not in self.runtime.model_capabilities:
+                return False
         if attachment.kind == "audio":
             return "audio" in self.runtime.capabilities
         if attachment.kind == "video":
