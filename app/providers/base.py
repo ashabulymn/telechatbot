@@ -17,6 +17,10 @@ class AIProvider(ABC):
     async def chat(self, messages: list[dict], model: str | None = None) -> ProviderResponse:
         raise NotImplementedError
 
+    async def list_models(self) -> list[str]:
+        """Return models exposed by this provider, when its API supports discovery."""
+        return []
+
     async def stream(self, messages: list[dict], model: str | None = None) -> AsyncIterator[str]:
         response = await self.chat(messages, model)
         if response.text:
