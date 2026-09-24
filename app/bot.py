@@ -248,6 +248,9 @@ class BotApp:
                                 except Exception:
                                     pass
                                 continue
+                        # Do not pass failed audio/video transcription to the
+                        # generic file fallback: it cannot expose media content.
+                        continue
                     remaining_attachments.append(item)
 
                 prepared_text = text
@@ -260,11 +263,6 @@ class BotApp:
                     prepared_text,
                     progress=attachment_progress,
                 )
-                if transcriptions:
-                    mapping.routing = [
-                        *(f"{part.split(']')[0].lstrip('[')}: transkripsi" for part in transcriptions),
-                        *mapping.routing,
-                    ]
                 content = mapping.parts or prepared_text
                 attachment_note = mapping.note
                 if mapping.warnings:
