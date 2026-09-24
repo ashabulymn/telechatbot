@@ -130,24 +130,21 @@ class BotApp:
                 except Exception:
                     log.debug("Model capability discovery skipped", exc_info=True)
 
+                # Model metadata is advisory unless the provider explicitly reports it.
+                # Pass it into the provider so native upload can be gated per file.
                 if model_info and model_info.capabilities_known:
-                    required = set()
-                    for item in attachments:
-                        if item.is_image: required.add("vision")
-                        elif item.kind == "audio": required.add("audio")
-                        elif item.kind == "video": required.add("video")
-                        elif item.kind in {"document", "pdf"}: required.add("file")
-                    missing = sorted(required - set(model_info.capabilities))
-                    if "vision" in missing:
+                    if any(item.is_image and "vision" not in model_info.capabilities for item in attachments):
                         await message.answer("Model aktif tidak mendukung gambar/vision menurut metadata provider. Pilih model lain dengan /models.")
                         return
-                    # Audio/video can be transparently routed through transcription.
-                    # If the model lacks direct file input, generic text extraction is
-                    # used instead of sending a native file it cannot consume.
-                    if "audio" in missing or "video" in missing:
-                        if not provider.supports_transcription(type("Item", (), {"kind": "audio", "path": None})()):
-                            await message.answer("Model aktif tidak mendukung audio/video dan provider tidak menyediakan transkripsi. Pilih model lain dengan /models.")
-                            return
+                    provider = self.providers.provider(
+                        provider_name,
+                        base_url_override=base_url,
+                        api_key_override=api_key,
+                        protocol_override=protocol,
+                        capabilities_override=capabilities,
+                        model_capabilities_override=model_info.capabilities,
+                        model_capabilities_known=True,
+                    )
 
                 status = await message.answer(
                     "📎 Menyiapkan lampiran..." if attachments else "⏳ Memproses..."
@@ -177,7 +174,17 @@ class BotApp:
                 transcriptions = []
                 remaining_attachments = []
                 for item in attachments:
-                    if item.kind in {"audio", "video"} and provider.attachment_mode(item) != "disabled" and provider.supports_transcription(item):
+                    should_transcribe = (
+                        item.kind in {"audio", "video"}
+                        and provider.attachment_mode(item) != "disabled"
+                        and provider.supports_transcription(item)
+                        and (
+                            not model_info
+                            or not model_info.capabilities_known
+                            or item.kind not in model_info.capabilities
+                        )
+                    )
+                    if should_transcribe:
                         try:
                             transcript = await provider.transcribe_attachment(item)
                         except ProviderError as exc:
@@ -193,9 +200,15 @@ class BotApp:
                                 f"[Transkripsi {item.filename or item.kind}]\n{transcript}"
                             )
                             # Audio is fully represented by its transcript.
-                            # Keep video so a capable native provider can also
-                            # inspect the original video after its audio is transcribed.
-                            if item.kind == "audio":
+                            # Audio is represented by transcript. Video is also
+                            # removed when the selected model lacks video input;
+                            # otherwise the native provider may inspect both.
+                            if item.kind == "audio" or (
+                                item.kind == "video"
+                                and model_info
+                                and model_info.capabilities_known
+                                and "video" not in model_info.capabilities
+                            ):
                                 continue
                     remaining_attachments.append(item)
 
