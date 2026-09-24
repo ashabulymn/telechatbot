@@ -110,15 +110,34 @@ class BotApp:
         try:
             provider_name = await self.db.get_provider(uid)
             profile = self.providers.profile(provider_name)
+            if not profile:
+                await message.answer("Provider aktif tidak ditemukan. Gunakan /provider untuk memilih provider.")
+                return
             custom = await self.db.get_custom_settings(uid)
-            base_url = custom["base_url"] or (profile.base_url if profile else self.settings.ai_base_url)
-            api_key = custom["api_key"] or (profile.api_key if profile else self.settings.ai_api_key)
-            has_image = any(
-                isinstance(part, dict) and part.get("type") == "image_url"
-                for part in content if isinstance(content, list)
-            )
-            if has_image and profile and "vision" not in profile.capabilities:
-                await message.answer("Provider yang dipilih tidak mendukung vision/image.")
+            base_url = custom["base_url"] or profile.base_url
+            api_key = custom["api_key"] or profile.api_key
+
+            required = {"text"}
+            for item in attachments:
+                if item.is_image:
+                    required.add("vision")
+                elif item.mime_type == "application/pdf":
+                    required.add("pdf")
+                elif item.mime_type and item.mime_type.startswith("audio/"):
+                    required.add("audio")
+                elif item.mime_type and item.mime_type.startswith("video/"):
+                    required.add("video")
+                elif item.mime_type:
+                    required.add("document")
+
+            missing = required - set(profile.capabilities)
+            # Parsed PDFs/documents and unsupported media can fall back to text.
+            # Images cannot safely fall back when the provider lacks vision.
+            if "vision" in missing:
+                await message.answer(
+                    "Provider ini belum mendukung gambar/vision. "
+                    "Pilih provider lain dengan /provider."
+                )
                 return
             provider = self.providers.provider(provider_name, base_url_override=base_url, api_key_override=api_key)
             selected_model = await self.db.get_model(uid)
