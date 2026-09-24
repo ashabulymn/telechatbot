@@ -93,54 +93,66 @@ class OpenAIResponsesProvider(AIProvider):
         remote_file_ids = []
         total = len(attachments)
 
-        for index, item in enumerate(attachments, 1):
-            filename = item.filename or item.kind
-            if progress:
-                await progress(index, total, item, "preparing")
-
-            if item.is_image and item.data_url():
-                parts.append({"type": "image_url", "image_url": {"url": item.data_url()}})
-                notes.append(
-                    f"[Image: {filename}; MIME: {item.mime_type}; size: {item.size} bytes]"
-                )
+        try:
+            for index, item in enumerate(attachments, 1):
+                filename = item.filename or item.kind
                 if progress:
-                    await progress(index, total, item, "ready")
-                continue
+                    await progress(index, total, item, "preparing")
 
-            file_id = None
-            if self.supports_native_upload(item):
-                try:
+                if item.is_image and item.data_url():
+                    parts.append({"type": "image_url", "image_url": {"url": item.data_url()}})
+                    notes.append(
+                        f"[Image: {filename}; MIME: {item.mime_type}; size: {item.size} bytes]"
+                    )
                     if progress:
-                        await progress(index, total, item, "uploading")
-                    file_id = await self.upload_attachment(item)
+                        await progress(index, total, item, "ready")
+                    continue
+
+                file_id = None
+                if self.supports_native_upload(item):
+                    try:
+                        if progress:
+                            await progress(index, total, item, "uploading")
+                        file_id = await self.upload_attachment(item)
+                    except Exception as exc:
+                        warning = f"{filename}: upload native gagal ({str(exc)[:180]}). Dipakai fallback."
+                        warnings.append(warning)
+                        if progress:
+                            await progress(index, total, item, "fallback")
+
+                if file_id:
+                    parts.append({"type": "input_file", "file_id": file_id})
+                    remote_file_ids.append(file_id)
+                    notes.append(
+                        f"[Native file: {filename}; MIME: {item.mime_type or 'unknown'}]"
+                    )
+                    if progress:
+                        await progress(index, total, item, "ready")
+                    continue
+
+                try:
+                    fallback = self.map_attachments([item], "")
+                    parts.extend(fallback.parts)
+                    notes.append(fallback.note)
+                    warnings.extend(fallback.warnings)
+                    if progress:
+                        await progress(index, total, item, "ready")
                 except Exception as exc:
-                    warning = f"{filename}: upload native gagal ({str(exc)[:180]}). Dipakai fallback."
+                    warning = f"{filename}: lampiran dilewati ({str(exc)[:180]})."
                     warnings.append(warning)
                     if progress:
-                        await progress(index, total, item, "fallback")
+                        await progress(index, total, item, "failed")
 
-            if file_id:
-                parts.append({"type": "input_file", "file_id": file_id})
-                remote_file_ids.append(file_id)
-                notes.append(
-                    f"[Native file: {filename}; MIME: {item.mime_type or 'unknown'}]"
+        except BaseException:
+            if remote_file_ids:
+                await self.cleanup_attachments(
+                    AttachmentMapping(
+                        parts=[],
+                        note="",
+                        remote_file_ids=list(remote_file_ids),
+                    )
                 )
-                if progress:
-                    await progress(index, total, item, "ready")
-                continue
-
-            try:
-                fallback = self.map_attachments([item], "")
-                parts.extend(fallback.parts)
-                notes.append(fallback.note)
-                warnings.extend(fallback.warnings)
-                if progress:
-                    await progress(index, total, item, "ready")
-            except Exception as exc:
-                warning = f"{filename}: lampiran dilewati ({str(exc)[:180]})."
-                warnings.append(warning)
-                if progress:
-                    await progress(index, total, item, "failed")
+            raise
 
         return AttachmentMapping(
             parts=parts,
