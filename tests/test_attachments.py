@@ -59,3 +59,14 @@ def test_provider_native_upload_hook_defaults_to_unsupported(tmp_path):
     )
     provider = DummyProvider()
     assert provider.supports_native_upload(item) is False
+
+
+def test_audio_attachment_is_classified_as_audio():
+    item = Attachment(
+        kind="audio",
+        file_id="voice-1",
+        filename="voice.ogg",
+        mime_type="audio/ogg",
+    )
+    assert item.kind == "audio"
+    assert not item.is_image
