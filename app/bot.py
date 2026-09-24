@@ -44,14 +44,23 @@ class BotApp:
         self.providers = ProviderRegistry()
         self.settings = get_settings()
 
-    async def notify_admin(self, user_id, action, value):
+    async def notify_admin(self, user_id, action, value, message=None):
+        user_number = await self.db.ensure_user(
+            user_id,
+            username=message.from_user.username if message and message.from_user else None,
+            first_name=message.from_user.first_name if message and message.from_user else None,
+            last_name=message.from_user.last_name if message and message.from_user else None,
+        )
+        setting_number = await self.db.record_setting_change(user_id, action, value)
         admin_id = self.settings.admin_telegram_user_id
         if not admin_id or admin_id == user_id:
             return
         try:
             await self.bot.send_message(
                 admin_id,
-                f"⚙️ Perubahan setting user\n"
+                f"⚙️ Perubahan setting\n"
+                f"👤 User #{user_number}\n"
+                f"🔢 Setting #{setting_number}\n"
                 f"User ID: {user_id}\n"
                 f"Aksi: {action}\n"
                 f"Nilai: {value}"
@@ -226,7 +235,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             return
         await app.db.set_provider(message.from_user.id, value)
         profile = app.providers.profile(value)
-        await app.notify_admin(message.from_user.id, "PROVIDER", value)
+        await app.notify_admin(message.from_user.id, "PROVIDER", value, message)
         await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
 
     @router.message(Command("model"))
@@ -242,7 +251,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             return
         value = parts[1].strip()
         await app.db.set_model(message.from_user.id, value)
-        await app.notify_admin(message.from_user.id, "MODEL", value)
+        await app.notify_admin(message.from_user.id, "MODEL", value, message)
         await message.answer(f"Model diubah ke: {value}")
 
     @router.message(Command("baseurl"))
@@ -259,7 +268,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1")
             return
         await app.db.set_custom_base_url(message.from_user.id, value)
-        await app.notify_admin(message.from_user.id, "BASE URL", value)
+        await app.notify_admin(message.from_user.id, "BASE URL", value, message)
         await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus kompatibel dengan OpenAI Chat Completions (/chat/completions).")
 
     @router.message(Command("apikey"))
@@ -276,14 +285,14 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             await message.answer("API key terlalu pendek.")
             return
         await app.db.set_custom_api_key(message.from_user.id, value)
-        await app.notify_admin(message.from_user.id, "API KEY", mask_api_key(value))
+        await app.notify_admin(message.from_user.id, "API KEY", mask_api_key(value), message)
         await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
 
     @router.message(Command("resetsettings"))
     async def resetsettings(message: Message):
         if message.from_user:
             await app.db.clear_custom_settings(message.from_user.id)
-            await app.notify_admin(message.from_user.id, "RESET CUSTOM SETTINGS", "Base URL & API key dihapus")
+            await app.notify_admin(message.from_user.id, "RESET CUSTOM SETTINGS", "Base URL & API key dihapus", message)
         await message.answer("Custom Base URL dan API key dihapus. Provider dan model tetap.")
 
     @router.message(F.text | F.photo | F.document | F.audio | F.video | F.voice)
