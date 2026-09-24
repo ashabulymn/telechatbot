@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     ai_max_history_messages: int = 20
     ai_system_prompt: str = ""
     ai_transcription_model: str = "gpt-4o-mini-transcribe"
+    ai_video_transcription_enabled: bool = True
+    ai_transcription_max_seconds: int = 300
 
     database_path: str = "/app/data/telechatbot.db"
     custom_settings_encryption_key: str = ""
