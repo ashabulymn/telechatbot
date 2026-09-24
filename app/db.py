@@ -25,18 +25,29 @@ class Database:
 
     async def ensure_user(self, user_id, username=None, first_name=None, last_name=None):
         async with aiosqlite.connect(self.path) as db:
-            await db.execute(
-                """INSERT INTO users(telegram_user_id,username,first_name,last_name)
-                   VALUES (?,?,?,?)
-                   ON CONFLICT(telegram_user_id) DO UPDATE SET
-                   username=excluded.username, first_name=excluded.first_name,
-                   last_name=excluded.last_name, updated_at=CURRENT_TIMESTAMP""",
-                (user_id, username, first_name, last_name),
+            await db.execute("BEGIN IMMEDIATE")
+            cur = await db.execute(
+                "SELECT user_number FROM users WHERE telegram_user_id=?",
+                (user_id,),
             )
-            await db.commit()
-            cur = await db.execute("SELECT user_number FROM users WHERE telegram_user_id=?", (user_id,))
             row = await cur.fetchone()
-        return row[0]
+            if row:
+                user_number = row[0]
+                await db.execute(
+                    """UPDATE users SET username=?, first_name=?, last_name=?,
+                       updated_at=CURRENT_TIMESTAMP
+                       WHERE telegram_user_id=?""",
+                    (username, first_name, last_name, user_id),
+                )
+            else:
+                cur = await db.execute(
+                    """INSERT INTO users(telegram_user_id,username,first_name,last_name)
+                       VALUES (?,?,?,?)""",
+                    (user_id, username, first_name, last_name),
+                )
+                user_number = cur.lastrowid
+            await db.commit()
+        return user_number
 
     async def record_setting_change(self, user_id, action, value):
         async with aiosqlite.connect(self.path) as db:
