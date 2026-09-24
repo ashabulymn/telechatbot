@@ -8,6 +8,7 @@ from .base import AIProvider
 from .openai_compatible import OpenAICompatibleProvider
 from .openai_responses import OpenAIResponsesProvider
 from .anthropic import AnthropicMessagesProvider
+from .gemini import GeminiProvider
 from .registry_types import ProviderRuntime
 from .errors import ProviderConfigurationError
 from ..config import get_settings
@@ -26,7 +27,7 @@ class ProviderProfile:
 
 
 class ProviderRegistry:
-    SUPPORTED_PROTOCOLS = frozenset({"openai_chat_completions", "openai_responses", "anthropic_messages"})
+    SUPPORTED_PROTOCOLS = frozenset({"openai_chat_completions", "openai_responses", "anthropic_messages", "gemini_generate_content"})
     CAPABILITIES = frozenset({"text", "vision", "pdf", "document", "audio", "video", "file", "file_cleanup", "transcription"})
     ATTACHMENT_MODES = frozenset({"auto", "native", "transcribe", "fallback", "disabled"})
 
@@ -132,6 +133,8 @@ class ProviderRegistry:
             return OpenAIResponsesProvider(runtime)
         if protocol == "anthropic_messages":
             return AnthropicMessagesProvider(runtime)
+        if protocol == "gemini_generate_content":
+            return GeminiProvider(runtime)
         return OpenAICompatibleProvider(runtime)
 
     def profile(self, name=None):
