@@ -25,7 +25,7 @@ class ProviderProfile:
 
 class ProviderRegistry:
     SUPPORTED_PROTOCOLS = frozenset({"openai_chat_completions", "openai_responses"})
-    CAPABILITIES = frozenset({"text", "vision", "pdf", "document", "audio", "video", "file", "file_cleanup"})
+    CAPABILITIES = frozenset({"text", "vision", "pdf", "document", "audio", "video", "file", "file_cleanup", "transcription"})
 
     def __init__(self):
         self.settings = get_settings()
