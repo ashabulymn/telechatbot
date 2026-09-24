@@ -117,9 +117,24 @@ class BotApp:
             if any(part.get("type") == "image_url" for part in content if isinstance(part, dict)) and profile and "vision" not in profile.capabilities:
                 await message.answer("Provider yang dipilih tidak mendukung vision/image.")
                 return
-            result = await self.providers.provider(provider_name, base_url_override=base_url, api_key_override=api_key).chat(
-                messages, await self.db.get_model(uid)
-            )
+            provider = self.providers.provider(provider_name, base_url_override=base_url, api_key_override=api_key)
+            selected_model = await self.db.get_model(uid)
+            status = await message.answer("⏳ Memproses...")
+            chunks = []
+            try:
+                async for chunk in provider.stream(messages, selected_model):
+                    chunks.append(chunk)
+                    if sum(len(x) for x in chunks) >= 250:
+                        preview = "".join(chunks)
+                        await status.edit_text(f"⏳ {preview[-3900:]}")
+                        chunks.clear()
+                result_text = "".join(chunks)
+            except ProviderError:
+                raise
+            if not result_text:
+                fallback = await provider.chat(messages, selected_model)
+                result_text = fallback.text
+            await status.delete()
         except ProviderError as exc:
             await message.answer(str(exc))
             return
@@ -128,8 +143,8 @@ class BotApp:
             await message.answer("Terjadi error saat menghubungi provider AI.")
             return
 
-        await self.db.add_message(uid, "assistant", result.text)
-        await send_long_message(message, result.text)
+        await self.db.add_message(uid, "assistant", result_text)
+        await send_long_message(message, result_text)
 
 def register_handlers(dp: Dispatcher, app: BotApp):
     @router.message.middleware()
