@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from ..attachments import Attachment
-from .attachments import AttachmentMapping, ProgressCallback, ProgressCallback
+from .attachments import AttachmentMapping, ProgressCallback
 
 
 @dataclass
@@ -47,6 +47,10 @@ class AIProvider(ABC):
             for index, item in enumerate(attachments, 1):
                 await progress(index, len(attachments), item, "preparing")
         return self.map_attachments(attachments, text)
+
+    async def cleanup_attachments(self, mapping: AttachmentMapping) -> None:
+        """Optional cleanup hook for provider-side temporary files."""
+        return None
 
     async def upload_attachment(self, attachment: Attachment) -> str | None:
         """Optional native upload hook.
