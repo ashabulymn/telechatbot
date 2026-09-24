@@ -8,3 +8,4 @@ class ProviderRuntime:
     api_key: str
     default_model: str
     extra_body: dict[str, Any] = field(default_factory=dict)
+    capabilities: frozenset[str] = field(default_factory=frozenset)
