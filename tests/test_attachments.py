@@ -1,4 +1,4 @@
-from pathlib import Path
+import pytest\nfrom pathlib import Path
 
 from app.attachments import Attachment
 from app.file_parser import FileParser
@@ -165,3 +165,54 @@ def test_mapping_tracks_remote_file_ids():
         remote_file_ids=["file_1", "file_2"],
     )
     assert mapping.remote_file_ids == ["file_1", "file_2"]
+
+
+@pytest.mark.asyncio
+async def test_responses_provider_cleanup_deletes_remote_files(monkeypatch):
+    from app.providers.openai_responses import OpenAIResponsesProvider
+    from app.providers.registry_types import ProviderRuntime
+    from app.providers.attachments import AttachmentMapping
+
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file"}),
+        )
+    )
+
+    deleted = []
+
+    class FakeResponse:
+        def __init__(self, status_code=204):
+            self.status_code = status_code
+
+        @property
+        def is_error(self):
+            return self.status_code >= 400
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def delete(self, url, headers=None):
+            deleted.append((url, headers))
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "app.providers.openai_responses.httpx.AsyncClient",
+        lambda **kwargs: FakeClient(),
+    )
+
+    mapping = AttachmentMapping(parts=[], note="", remote_file_ids=["file_1", "file_2"])
+    await provider.cleanup_attachments(mapping)
+
+    assert [item[0] for item in deleted] == [
+        "https://example.com/v1/files/file_1",
+        "https://example.com/v1/files/file_2",
+    ]
