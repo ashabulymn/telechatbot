@@ -132,6 +132,10 @@ class BotApp:
 
                 # Model metadata is advisory unless the provider explicitly reports it.
                 # Pass it into the provider so native upload can be gated per file.
+                if any(item.is_image for item in attachments) and "vision" not in capabilities:
+                    await message.answer("Provider ini belum mendukung gambar/vision. Pilih provider lain dengan /provider.")
+                    return
+
                 if model_info and model_info.capabilities_known:
                     if any(item.is_image and "vision" not in model_info.capabilities for item in attachments):
                         await message.answer("Model aktif tidak mendukung gambar/vision menurut metadata provider. Pilih model lain dengan /models.")
