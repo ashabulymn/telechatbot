@@ -361,11 +361,22 @@ def register_handlers(dp: Dispatcher, app: BotApp):
     @router.message(Command("models"))
     async def models(message: Message):
         if not message.from_user: return
-        try: provider_name, available, current = await _discover_models(message.from_user.id)
+        try:
+            provider_name, info, current = await _discover_model_info(message.from_user.id)
+            available = [item.id for item in info]
         except ProviderError as exc: await message.answer(f"Gagal mengambil daftar model: {exc}"); return
         except Exception: log.exception("Model discovery failed"); await message.answer("Gagal mengambil daftar model dari provider."); return
         if not available: await message.answer("Provider " + provider_name + " tidak mengembalikan daftar model otomatis.\nGunakan /model <nama-model> secara manual."); return
-        await message.answer(f"🤖 Model tersedia — {provider_name}\nHalaman 1 • {len(available)} model\nTap model untuk mengaktifkan:", reply_markup=model_keyboard(available, current, 0))
+        badges = {"vision": "👁", "audio": "🎙", "video": "🎬", "file": "📎", "reasoning": "🧠"}
+        detected = []
+        for item in info[:20]:
+            icons = " ".join(badges[key] for key in badges if key in item.capabilities)
+            if icons:
+                detected.append(f"• {item.id}  {icons}")
+        note = "\n\nKapabilitas hanya ditampilkan jika API provider mengirim metadata eksplisit."
+        if detected:
+            note += "\n\nDeteksi otomatis:\n" + "\n".join(detected)
+        await message.answer(f"🤖 Model tersedia — {provider_name}\nHalaman 1 • {len(available)} model\nTap model untuk mengaktifkan:" + note, reply_markup=model_keyboard(available, current, 0))
 
     @router.callback_query(F.data.startswith("modelpage:"))
     async def model_page(callback: CallbackQuery):
