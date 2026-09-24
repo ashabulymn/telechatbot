@@ -209,7 +209,13 @@ class OpenAIResponsesProvider(AIProvider):
             raise ProviderError("Provider file API tidak mengembalikan file ID.")
         return str(file_id)
 
+    def attachment_mode(self, attachment):
+        return self.runtime.attachment_modes.get(attachment.kind, "auto")
+
     def supports_native_upload(self, attachment):
+        mode = self.attachment_mode(attachment)
+        if mode in {"fallback", "transcribe", "disabled"}:
+            return False
         if not attachment.path or "file" not in self.runtime.capabilities:
             return False
         if attachment.kind == "audio":
@@ -222,6 +228,7 @@ class OpenAIResponsesProvider(AIProvider):
         return (
             bool(attachment.path)
             and attachment.kind in {"audio", "video"}
+            and self.attachment_mode(attachment) in {"auto", "transcribe"}
             and "transcription" in self.runtime.capabilities
         )
 
