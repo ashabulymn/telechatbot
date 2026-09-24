@@ -123,16 +123,25 @@ class BotApp:
                     await message.answer("Provider ini menonaktifkan lampiran: " + ", ".join(disabled[:5]))
                     return
 
-                # Images require a vision-capable provider because the fallback
-                # representation cannot turn pixels into useful text. Other files
-                # can fall back to bounded extraction/metadata when native support
-                # is unavailable.
-                if any(item.is_image for item in attachments) and "vision" not in capabilities:
-                    await message.answer(
-                        "Provider ini belum mendukung gambar/vision. "
-                        "Pilih provider lain dengan /provider."
-                    )
-                    return
+                selected_model = await self.db.get_model(uid)
+                model_info = None
+                try:
+                    model_info = next((item for item in await provider.list_model_info() if item.id == selected_model), None)
+                except Exception:
+                    log.debug("Model capability discovery skipped", exc_info=True)
+
+                if model_info and model_info.capabilities_known:
+                    required = set()
+                    for item in attachments:
+                        if item.is_image: required.add("vision")
+                        elif item.kind == "audio": required.add("audio")
+                        elif item.kind == "video": required.add("video")
+                        elif item.kind in {"document", "pdf"}: required.add("file")
+                    missing = sorted(required - set(model_info.capabilities))
+                    if missing:
+                        labels = {"vision": "gambar/vision", "audio": "audio", "video": "video", "file": "file/dokumen"}
+                        await message.answer("Model aktif tidak melaporkan dukungan untuk: " + ", ".join(labels.get(cap, cap) for cap in missing) + ". Pilih model lain dengan /models.")
+                        return
 
                 status = await message.answer(
                     "📎 Menyiapkan lampiran..." if attachments else "⏳ Memproses..."
@@ -216,7 +225,6 @@ class BotApp:
                     if self.settings.ai_system_prompt else []
                 )
                 messages.extend(history)
-                selected_model = await self.db.get_model(uid)
                 if not attachments:
                     try:
                         await status.edit_text("⏳ Memproses...")
@@ -355,6 +363,21 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         custom = await app.db.get_custom_settings(uid)
         provider = app.providers.provider(provider_name, base_url_override=custom["base_url"] or None, api_key_override=custom["api_key"] or None, protocol_override=custom["protocol"] or None, capabilities_override=custom["capabilities"] or None)
         available = await provider.list_models()
+        current = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model
+        return provider_name, available, current
+
+    async def _discover_model_info(uid):
+        provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
+        profile = app.providers.profile(provider_name)
+        custom = await app.db.get_custom_settings(uid)
+        provider = app.providers.provider(
+            provider_name,
+            base_url_override=custom["base_url"] or None,
+            api_key_override=custom["api_key"] or None,
+            protocol_override=custom["protocol"] or None,
+            capabilities_override=custom["capabilities"] or None,
+        )
+        available = await provider.list_model_info()
         current = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model
         return provider_name, available, current
 
