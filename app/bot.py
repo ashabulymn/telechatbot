@@ -44,6 +44,21 @@ class BotApp:
         self.providers = ProviderRegistry()
         self.settings = get_settings()
 
+    async def notify_admin(self, user_id, action, value):
+        admin_id = self.settings.admin_telegram_user_id
+        if not admin_id or admin_id == user_id:
+            return
+        try:
+            await self.bot.send_message(
+                admin_id,
+                f"⚙️ Perubahan setting user\n"
+                f"User ID: {user_id}\n"
+                f"Aksi: {action}\n"
+                f"Nilai: {value}"
+            )
+        except Exception:
+            log.exception("Failed to notify admin about user setting change")
+
     async def handle_message(self, message: Message):
         if not message.from_user:
             return
@@ -218,6 +233,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             return
         value = parts[1].strip()
         await app.db.set_model(message.from_user.id, value)
+        await app.notify_admin(message.from_user.id, "MODEL", value)
         await message.answer(f"Model diubah ke: {value}")
 
     @router.message(Command("baseurl"))
@@ -234,6 +250,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1")
             return
         await app.db.set_custom_base_url(message.from_user.id, value)
+        await app.notify_admin(message.from_user.id, "BASE URL", value)
         await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus kompatibel dengan OpenAI Chat Completions (/chat/completions).")
 
     @router.message(Command("apikey"))
@@ -250,6 +267,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             await message.answer("API key terlalu pendek.")
             return
         await app.db.set_custom_api_key(message.from_user.id, value)
+        await app.notify_admin(message.from_user.id, "API KEY", mask_api_key(value))
         await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
 
     @router.message(Command("resetsettings"))
