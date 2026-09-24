@@ -1,4 +1,8 @@
+import asyncio
 import json
+import os
+import tempfile
+from pathlib import Path
 from typing import AsyncIterator
 from urllib.parse import urlparse
 
@@ -128,16 +132,41 @@ class OpenAIResponsesProvider(AIProvider):
         return bool(attachment.path)
 
     async def transcribe_attachment(self, attachment):
-        if not attachment.path or attachment.kind != "audio":
+        if not attachment.path or attachment.kind not in {"audio", "video"}:
             return None
+
+        source_path = attachment.path
+        temporary_audio = None
+        if attachment.kind == "video":
+            if not self.settings.ai_video_transcription_enabled:
+                return None
+            fd, temporary_audio = tempfile.mkstemp(suffix=".mp3")
+            os.close(fd)
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-hide_banner", "-loglevel", "error",
+                    "-i", attachment.path,
+                    "-vn", "-t", str(self.settings.ai_transcription_max_seconds),
+                    "-ac", "1", "-ar", "16000", "-b:a", "64k",
+                    "-y", temporary_audio,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                _, stderr = await process.communicate()
+                if process.returncode != 0 or not Path(temporary_audio).exists():
+                    return None
+                source_path = temporary_audio
+            except (OSError, asyncio.TimeoutError):
+                return None
+
         base, headers = self._base()
         try:
-            with open(attachment.path, "rb") as fh:
+            with open(source_path, "rb") as fh:
                 files = {
                     "file": (
-                        attachment.filename or "audio",
+                        attachment.filename or ("video-audio.mp3" if attachment.kind == "video" else "audio"),
                         fh,
-                        attachment.mime_type or "application/octet-stream",
+                        "audio/mpeg",
                     )
                 }
                 data = {"model": self.settings.ai_transcription_model}
@@ -149,9 +178,13 @@ class OpenAIResponsesProvider(AIProvider):
                         files=files,
                     )
         except httpx.TimeoutException as exc:
-            raise ProviderError("Transkripsi audio timeout.") from exc
+            raise ProviderError("Transkripsi audio/video timeout.") from exc
         except httpx.HTTPError as exc:
             raise ProviderError("Provider audio API tidak dapat dihubungi.") from exc
+        finally:
+            if temporary_audio:
+                Path(temporary_audio).unlink(missing_ok=True)
+
         if response.is_error:
             raise self._http_error(response)
         try:
