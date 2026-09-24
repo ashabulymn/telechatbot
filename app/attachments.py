@@ -81,14 +81,22 @@ class AttachmentManager:
         return f"{uuid.uuid4().hex[:12]}_{name or 'attachment'}"
 
     async def _download(self, file_id, filename, declared_size=None):
-        max_bytes = self.settings.attachment_max_mb * 1024 * 1024
+        max_mb = (
+            self.settings.attachment_max_image_mb
+            if filename == "photo.jpg" or (
+                isinstance(filename, str)
+                and Path(filename).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+            )
+            else self.settings.attachment_max_mb
+        )
+        max_bytes = max_mb * 1024 * 1024
         if declared_size is not None and declared_size > max_bytes:
-            raise ValueError(f"Attachment exceeds {self.settings.attachment_max_mb} MB")
+            raise ValueError(f"Attachment exceeds {max_mb} MB")
 
         info = await self.bot.get_file(file_id)
         remote_size = getattr(info, "file_size", None)
         if remote_size is not None and remote_size > max_bytes:
-            raise ValueError(f"Attachment exceeds {self.settings.attachment_max_mb} MB")
+            raise ValueError(f"Attachment exceeds {max_mb} MB")
 
         path = Path(self.settings.attachment_dir) / filename
         await self.bot.download(info, destination=path)
