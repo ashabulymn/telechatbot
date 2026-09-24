@@ -127,6 +127,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         await message.answer(
             "TeleChatBot aktif.\n"
             "Kirim pesan untuk mulai chat.\n"
+            "/myid — lihat Telegram user ID kamu\n"
             "/provider — pilih provider\n"
             "/model <nama> — pilih model\n"
             "/baseurl <URL> — custom Base URL\n"
@@ -136,10 +137,17 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             "/clear — hapus riwayat."
         )
 
+    @router.message(Command("myid"))
+    async def myid(message: Message):
+        if not message.from_user:
+            return
+        await message.answer(f"Telegram User ID kamu: {message.from_user.id}")
+
     @router.message(Command("help"))
     async def help_cmd(message: Message):
         await message.answer(
             "/start — mulai\n"
+            "/myid — lihat Telegram user ID kamu\n"
             "/provider <nama> — pilih provider preset\n"
             "/model <model> — pilih model\n"
             "/baseurl <URL> — set custom Base URL\n"
@@ -218,6 +226,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             return
         await app.db.set_provider(message.from_user.id, value)
         profile = app.providers.profile(value)
+        await app.notify_admin(message.from_user.id, "PROVIDER", value)
         await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
 
     @router.message(Command("model"))
@@ -274,6 +283,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
     async def resetsettings(message: Message):
         if message.from_user:
             await app.db.clear_custom_settings(message.from_user.id)
+            await app.notify_admin(message.from_user.id, "RESET CUSTOM SETTINGS", "Base URL & API key dihapus")
         await message.answer("Custom Base URL dan API key dihapus. Provider dan model tetap.")
 
     @router.message(F.text | F.photo | F.document | F.audio | F.video | F.voice)
