@@ -96,10 +96,27 @@ class OpenAIResponsesProvider(AIProvider):
         try:
             for index, item in enumerate(attachments, 1):
                 filename = item.filename or item.kind
+                mode = self.attachment_mode(item)
                 if progress:
                     await progress(index, total, item, "preparing")
 
+                if mode == "disabled":
+                    warnings.append(f"{filename}: mode attachment dinonaktifkan.")
+                    if progress:
+                        await progress(index, total, item, "failed")
+                    continue
+
                 if item.is_image and item.data_url():
+                    if (
+                        self.runtime.model_capabilities_known
+                        and "vision" not in self.runtime.model_capabilities
+                    ):
+                        warnings.append(
+                            f"{filename}: model aktif tidak menyatakan dukungan vision; gambar dilewati."
+                        )
+                        if progress:
+                            await progress(index, total, item, "failed")
+                        continue
                     parts.append({"type": "image_url", "image_url": {"url": item.data_url()}})
                     notes.append(
                         f"[Image: {filename}; MIME: {item.mime_type}; size: {item.size} bytes]"
