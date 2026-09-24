@@ -53,6 +53,9 @@ class BotApp:
         self.parser = FileParser(get_settings().attachment_max_prompt_chars)
         self.providers = ProviderRegistry()
         self.settings = get_settings()
+        # Short-lived cache prevents repeated /models calls on every message.
+        self._model_info_cache = {}
+        self._model_info_cache_ttl = 300.0
 
     async def notify_admin(self, user_id, action, value, message=None):
         user_number = await self.db.ensure_user(
@@ -126,7 +129,19 @@ class BotApp:
                 selected_model = await self.db.get_model(uid)
                 model_info = None
                 try:
-                    model_info = next((item for item in await provider.list_model_info() if item.id == selected_model), None)
+                    import time
+                    cache_key = (uid, provider_name, base_url, protocol, bool(api_key))
+                    cached = self._model_info_cache.get(cache_key)
+                    now = time.monotonic()
+                    if cached and now - cached["at"] < self._model_info_cache_ttl:
+                        model_info = next((item for item in cached["models"] if item.id == selected_model), None)
+                    else:
+                        discovered = await provider.list_model_info()
+                        self._model_info_cache[cache_key] = {"at": now, "models": discovered}
+                        model_info = next((item for item in discovered if item.id == selected_model), None)
+                        if len(self._model_info_cache) > 100:
+                            oldest = min(self._model_info_cache, key=lambda key: self._model_info_cache[key]["at"])
+                            self._model_info_cache.pop(oldest, None)
                 except Exception:
                     log.debug("Model capability discovery skipped", exc_info=True)
 
@@ -385,6 +400,10 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         value = parts[1].strip()
         if value not in app.providers.names(): await message.answer("Provider tidak ditemukan. Ketik /provider untuk melihat daftar."); return
         await app.db.set_provider(message.from_user.id, value)
+        app._model_info_cache = {
+            key: cached for key, cached in app._model_info_cache.items()
+            if key[0] != message.from_user.id
+        }
         profile = app.providers.profile(value)
         await app.notify_admin(message.from_user.id, "PROVIDER", value, message)
         await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
