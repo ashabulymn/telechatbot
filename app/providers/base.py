@@ -12,6 +12,13 @@ class ProviderResponse:
     raw: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class ModelInfo:
+    id: str
+    capabilities: frozenset[str] = frozenset()
+    display_name: str = ""
+
+
 class AIProvider(ABC):
     @abstractmethod
     async def chat(self, messages: list[dict], model: str | None = None) -> ProviderResponse:
@@ -20,6 +27,10 @@ class AIProvider(ABC):
     async def list_models(self) -> list[str]:
         """Return models exposed by this provider, when its API supports discovery."""
         return []
+
+    async def list_model_info(self) -> list[ModelInfo]:
+        """Return model metadata when the provider exposes reliable hints."""
+        return [ModelInfo(id=model) for model in await self.list_models()]
 
     async def stream(self, messages: list[dict], model: str | None = None) -> AsyncIterator[str]:
         response = await self.chat(messages, model)
