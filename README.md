@@ -10,19 +10,24 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 - Per-user custom Base URL and API key overrides with `/baseurl` and `/apikey`.
 - Provider adapter boundary for future native providers.
 - Per-user conversation history and model selection.
+- Stable sequential user and setting numbers for admin setting-change notifications.
 - SQLite by default.
 - Telegram photos, documents, audio, video, voice and generic files are normalized into an attachment abstraction.
 - Environment-based secrets; no credentials in source code.
+- Custom per-user API keys are encrypted at rest with Fernet when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured.
+- API keys are not stored in the setting-change audit table, while the admin notification can still receive the full key when configured.
 - Docker Compose deployment with health endpoint.
 
 ## Quick start
 
-1. Copy .env.example to .env.
-2. Set TELEGRAM_BOT_TOKEN, AI_API_KEY, AI_BASE_URL, and AI_MODEL.
-3. Run docker compose up -d --build.
-4. Send /start to the bot.
+1. Copy `.env.example` to `.env`.
+2. Set `TELEGRAM_BOT_TOKEN`, `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL`.
+3. For per-user custom API keys, set a persistent `CUSTOM_SETTINGS_ENCRYPTION_KEY`. Generate one with:
+   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+4. Run `docker compose up -d --build`.
+5. Send `/start` to the bot.
 
-For webhook mode, set TELEGRAM_MODE=webhook and provide a public HTTPS TELEGRAM_WEBHOOK_URL.
+For webhook mode, set `TELEGRAM_MODE=webhook` and provide a public HTTPS `TELEGRAM_WEBHOOK_URL`.
 
 Attachment support is provider-dependent. Images can be passed as data URLs to providers that accept OpenAI-style multimodal messages. Other files are preserved through the attachment abstraction for provider-specific adapters.
 
@@ -42,8 +47,16 @@ Each Telegram user can override the active provider without changing server envi
 
 - `/settings` — show the active settings (API key is masked).
 - `/baseurl https://example.com/v1` — set a custom OpenAI-compatible Base URL.
-- `/apikey YOUR_KEY` — set a custom API key. The key is stored in the bot database and is never displayed in full.
+- `/apikey YOUR_KEY` — set a custom API key. The key is encrypted at rest when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured and is never displayed in full to the user.
 - `/model MODEL_NAME` — select the model for the current user.
 - `/resetsettings` — remove the custom Base URL and API key while keeping provider/model selection.
 
+Existing legacy plaintext custom API keys remain readable for migration; once read while `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured, they are automatically re-encrypted. New custom API keys require the encryption key.
+
 A custom endpoint currently needs to implement OpenAI Chat Completions at `<base_url>/chat/completions`. Because an API key sent through Telegram appears in the Telegram chat history, delete the `/apikey ...` message after setting it if that matters for your threat model.
+
+## Admin setting notifications
+
+Set `ADMIN_TELEGRAM_USER_ID` to receive notifications when users change provider, model, Base URL, API key, or reset custom settings.
+
+Notifications include stable `User #` and `Setting #` numbers. For the API key event, the admin notification intentionally contains the full API key as configured, while the audit database stores only `[API KEY TIDAK DISIMPAN DI AUDIT]`.
