@@ -107,6 +107,7 @@ class ProviderRegistry:
             name=profile.name, base_url=base_url_override or profile.base_url,
             api_key=api_key_override or profile.api_key,
             default_model=profile.default_model, extra_body=profile.extra_body,
+            capabilities=profile.capabilities,
         )
         if profile.protocol == "openai_responses":
             return OpenAIResponsesProvider(runtime)
