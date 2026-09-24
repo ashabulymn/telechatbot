@@ -143,7 +143,7 @@ class OpenAIResponsesProvider(AIProvider):
                                 )
                                 parts.append({
                                     "type": "text",
-                                    "text": f"\\n[Transkripsi {filename}]\\n{transcript}",
+                                    "text": f"\n[Transkripsi {filename}]\n{transcript}",
                                 })
                                 notes.append(f"[Transkripsi: {filename}]")
                                 if progress:
