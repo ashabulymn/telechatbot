@@ -90,6 +90,38 @@ class GeminiProvider(AIProvider):
                     text.append(value)
         return "".join(text)
 
+    async def list_models(self) -> list[str]:
+        if not self.runtime.api_key:
+            raise ProviderConfigurationError("API key provider belum dikonfigurasi.")
+        try:
+            async with httpx.AsyncClient(timeout=self.settings.ai_timeout_seconds) as client:
+                response = await client.get(
+                    f"{self._base()}/models",
+                    headers={"x-goog-api-key": self.runtime.api_key},
+                    params={"pageSize": 1000},
+                )
+        except httpx.TimeoutException as exc:
+            raise ProviderError("Daftar model provider timeout.") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError("Provider model tidak dapat dihubungi.") from exc
+        if response.is_error:
+            raise self._http_error(response)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ProviderError("Provider model mengembalikan JSON yang tidak valid.") from exc
+        result = []
+        for item in data.get("models") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("baseModelId") or item.get("name") or "")
+            if name.startswith("models/"):
+                name = name[len("models/"):]
+            actions = item.get("supportedGenerationMethods") or item.get("supportedActions") or []
+            if name and (not actions or "generateContent" in actions):
+                result.append(name)
+        return sorted(set(result))
+
     async def chat(self, messages, model=None):
         url, headers, payload = self._request(messages, model)
         try:
