@@ -51,3 +51,17 @@ def test_routing_summary_is_user_readable():
     item = Item("document", "report.pdf")
     routes = plan_attachment_routes(Provider(), [item])
     assert "report.pdf → fallback" in route_summary(routes)
+
+
+def test_routing_disables_audio_when_no_processing_path_exists():
+    item = Item("audio", "voice.ogg")
+    provider = Provider()
+    routes = plan_attachment_routes(provider, [item])
+    assert routes[0].route == "disabled"
+
+
+def test_explicit_transcribe_mode_does_not_fallback_to_unreadable_media():
+    item = Item("video", "clip.mp4")
+    provider = Provider(modes={"video": "transcribe"})
+    routes = plan_attachment_routes(provider, [item])
+    assert routes[0].route == "disabled"
