@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..attachments import Attachment
-from .attachments import AttachmentMapping
+from .attachments import AttachmentMapping, ProgressCallback
 from .base import AIProvider, ProviderResponse
 from .errors import ProviderConfigurationError, ProviderError
 from .registry_types import ProviderRuntime
@@ -77,23 +77,70 @@ class OpenAIResponsesProvider(AIProvider):
             result.append({"role": role, "content": parts})
         return result
 
-    async def prepare_attachments(self, attachments, text=""):
+    async def prepare_attachments(
+        self,
+        attachments,
+        text="",
+        progress: ProgressCallback | None = None,
+    ):
         parts = [{"type": "text", "text": text}] if text else []
         notes = []
-        for item in attachments:
+        warnings = []
+        total = len(attachments)
+
+        for index, item in enumerate(attachments, 1):
+            filename = item.filename or item.kind
+            if progress:
+                await progress(index, total, item, "preparing")
+
             if item.is_image and item.data_url():
                 parts.append({"type": "image_url", "image_url": {"url": item.data_url()}})
-                notes.append(f"[Image: {item.filename}; MIME: {item.mime_type}; size: {item.size} bytes]")
+                notes.append(
+                    f"[Image: {filename}; MIME: {item.mime_type}; size: {item.size} bytes]"
+                )
+                if progress:
+                    await progress(index, total, item, "ready")
                 continue
-            file_id = await self.upload_attachment(item) if self.supports_native_upload(item) else None
+
+            file_id = None
+            if self.supports_native_upload(item):
+                try:
+                    if progress:
+                        await progress(index, total, item, "uploading")
+                    file_id = await self.upload_attachment(item)
+                except ProviderError as exc:
+                    warning = f"{filename}: upload native gagal ({str(exc)[:180]}). Dipakai fallback."
+                    warnings.append(warning)
+                    if progress:
+                        await progress(index, total, item, "fallback")
+
             if file_id:
                 parts.append({"type": "input_file", "file_id": file_id})
-                notes.append(f"[Native file: {item.filename or item.kind}; MIME: {item.mime_type or 'unknown'}]")
-            else:
+                notes.append(
+                    f"[Native file: {filename}; MIME: {item.mime_type or 'unknown'}]"
+                )
+                if progress:
+                    await progress(index, total, item, "ready")
+                continue
+
+            try:
                 fallback = self.map_attachments([item], "")
                 parts.extend(fallback.parts)
                 notes.append(fallback.note)
-        return AttachmentMapping(parts=parts, note="\n".join(notes))
+                warnings.extend(fallback.warnings)
+                if progress:
+                    await progress(index, total, item, "ready")
+            except Exception as exc:
+                warning = f"{filename}: lampiran dilewati ({str(exc)[:180]})."
+                warnings.append(warning)
+                if progress:
+                    await progress(index, total, item, "failed")
+
+        return AttachmentMapping(
+            parts=parts,
+            note="\n".join(notes),
+            warnings=warnings,
+        )
 
     async def upload_attachment(self, attachment: Attachment):
         if not attachment.path:
