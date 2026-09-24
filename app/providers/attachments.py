@@ -13,7 +13,6 @@ class AttachmentMapping:
     note: str
     warnings: list[str] = field(default_factory=list)
     remote_file_ids: list[str] = field(default_factory=list)
-    routing: list[str] = field(default_factory=list)
 
 
 class AttachmentAdapter:
