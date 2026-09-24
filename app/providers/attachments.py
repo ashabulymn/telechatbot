@@ -15,13 +15,7 @@ class AttachmentMapping:
 
 
 class AttachmentAdapter:
-    """Provider-neutral attachment mapper.
-
-    The protocol is deliberately separate from Telegram. A future native
-    provider adapter can implement file upload/transcription without changing
-    bot handlers. The current OpenAI Chat Completions adapter uses image data
-    URLs and bounded text extraction.
-    """
+    """Provider-neutral attachment mapper."""
 
     def __init__(self, parser: FileParser):
         self.parser = parser
