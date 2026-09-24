@@ -142,7 +142,7 @@ class BotApp:
                 transcriptions = []
                 remaining_attachments = []
                 for item in attachments:
-                    if item.kind in {"audio", "video"}:
+                    if item.kind in {"audio", "video"} and provider.supports_transcription(item):
                         try:
                             transcript = await provider.transcribe_attachment(item)
                         except ProviderError as exc:
