@@ -293,6 +293,8 @@ Each Telegram user can override the active provider without changing server envi
 - `/model MODEL_NAME` — select the model for the current user.\n- `/models` — query the active provider for its live model list when the provider exposes model discovery. OpenAI-compatible providers use `/models`; the Gemini native adapter uses Gemini's `models.list`; Anthropic uses its `/v1/models` endpoint.
 - `/resetsettings` — remove custom Base URL, API key, protocol, and capabilities while keeping provider/model selection.
 
+Catatan keamanan: `/baseurl` memungkinkan user memilih endpoint HTTP(S) arbitrer. Ini memang bagian dari desain universal provider, tetapi pada bot yang dapat dipakai publik berarti server menjadi client ke endpoint pilihan user. Untuk deployment multi-user, batasi egress jaringan container atau gunakan allowlist provider tepercaya bila kebutuhan universal endpoint tidak diperlukan.
+
 Existing legacy plaintext custom API keys remain readable for migration; once read while `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured, they are automatically re-encrypted. New custom API keys require the encryption key.
 
 A custom endpoint can override the preset provider protocol and capabilities per user. For example, `openai_chat_completions` uses `<base_url>/chat/completions`, while `openai_responses` uses `<base_url>/responses` and may also use the provider's file/transcription endpoints when the declared capabilities enable them. Because an API key sent through Telegram appears in the Telegram chat history, delete the `/apikey ...` message after setting it if that matters for your threat model.
