@@ -138,10 +138,16 @@ class BotApp:
                         elif item.kind == "video": required.add("video")
                         elif item.kind in {"document", "pdf"}: required.add("file")
                     missing = sorted(required - set(model_info.capabilities))
-                    if missing:
-                        labels = {"vision": "gambar/vision", "audio": "audio", "video": "video", "file": "file/dokumen"}
-                        await message.answer("Model aktif tidak melaporkan dukungan untuk: " + ", ".join(labels.get(cap, cap) for cap in missing) + ". Pilih model lain dengan /models.")
+                    if "vision" in missing:
+                        await message.answer("Model aktif tidak mendukung gambar/vision menurut metadata provider. Pilih model lain dengan /models.")
                         return
+                    # Audio/video can be transparently routed through transcription.
+                    # If the model lacks direct file input, generic text extraction is
+                    # used instead of sending a native file it cannot consume.
+                    if "audio" in missing or "video" in missing:
+                        if not provider.supports_transcription(type("Item", (), {"kind": "audio", "path": None})()):
+                            await message.answer("Model aktif tidak mendukung audio/video dan provider tidak menyediakan transkripsi. Pilih model lain dengan /models.")
+                            return
 
                 status = await message.answer(
                     "📎 Menyiapkan lampiran..." if attachments else "⏳ Memproses..."
