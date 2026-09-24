@@ -5,7 +5,8 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 ## Features
 
 - Telegram long polling or webhook mode.
-- OpenAI-compatible provider via configurable Base URL, API key, and model.
+- Universal provider profiles via configurable Base URL, API key, model, protocol and capabilities.
+- Per-user provider switching with `/provider`.
 - Provider adapter boundary for future native providers.
 - Per-user conversation history and model selection.
 - SQLite by default.
@@ -23,3 +24,13 @@ Universal Telegram AI chatbot foundation with pluggable AI providers, persistent
 For webhook mode, set TELEGRAM_MODE=webhook and provide a public HTTPS TELEGRAM_WEBHOOK_URL.
 
 Attachment support is provider-dependent. Images can be passed as data URLs to providers that accept OpenAI-style multimodal messages. Other files are preserved through the attachment abstraction for provider-specific adapters.
+
+## Multiple providers
+
+Set `AI_PROVIDERS_JSON` to define named OpenAI-compatible endpoints. Example:
+
+```json
+{"openrouter":{"base_url":"https://openrouter.ai/api/v1","api_key":"$OPENROUTER_API_KEY","default_model":"your-model","capabilities":["text","vision"]},"custom":{"base_url":"https://example.com/v1","api_key":"your-key","default_model":"your-model","capabilities":["text"]}}
+```
+
+The selected provider is stored per Telegram user. `/provider` lists providers and `/provider NAME` switches the active one. Native provider implementations can be added later without changing the Telegram layer.
