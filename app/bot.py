@@ -142,11 +142,17 @@ class BotApp:
                 transcriptions = []
                 remaining_attachments = []
                 for item in attachments:
-                    if item.kind == "audio":
+                    if item.kind in {"audio", "video"}:
                         try:
                             transcript = await provider.transcribe_attachment(item)
-                        except ProviderError:
+                        except ProviderError as exc:
                             transcript = None
+                            try:
+                                await status.edit_text(
+                                    f"⚠️ Transkripsi {item.filename or item.kind} gagal: {str(exc)[:180]}"
+                                )
+                            except Exception:
+                                pass
                         if transcript:
                             transcriptions.append(
                                 f"[Transkripsi {item.filename or item.kind}]\n{transcript}"
