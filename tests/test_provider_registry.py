@@ -6,6 +6,7 @@ from app.config import get_settings
 from app.providers.errors import ProviderConfigurationError
 from app.providers.openai_responses import OpenAIResponsesProvider
 from app.providers.anthropic import AnthropicMessagesProvider
+from app.providers.gemini import GeminiProvider
 from app.providers.registry import ProviderRegistry
 from app.providers.registry_types import ProviderRuntime
 
@@ -197,3 +198,27 @@ def test_registry_supports_anthropic_messages(monkeypatch):
     provider = registry.provider("anthropic")
     assert isinstance(provider, AnthropicMessagesProvider)
     assert provider._url() == "https://api.anthropic.com/v1/messages"
+
+
+def test_registry_supports_gemini_generate_content(monkeypatch):
+    _reset_settings(monkeypatch)
+    monkeypatch.setenv(
+        "AI_PROVIDERS_JSON",
+        json.dumps(
+            {
+                "gemini": {
+                    "protocol": "gemini_generate_content",
+                    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                    "api_key": "key",
+                    "default_model": "gemini-test",
+                    "capabilities": ["text", "vision"],
+                }
+            }
+        ),
+    )
+    registry = ProviderRegistry()
+    provider = registry.provider("gemini")
+    assert isinstance(provider, GeminiProvider)
+    url, _, payload = provider._request([{"role": "user", "content": "hello"}])
+    assert url.endswith("/models/gemini-test:generateContent")
+    assert payload["contents"][0]["parts"][0]["text"] == "hello"
