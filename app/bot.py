@@ -59,12 +59,8 @@ class BotApp:
         try:
             await self.bot.send_message(
                 admin_id,
-                f"⚙️ Perubahan setting\n"
-                f"👤 User #{user_number}\n"
-                f"🔢 Setting #{setting_number}\n"
-                f"User ID: {user_id}\n"
-                f"Aksi: {action}\n"
-                f"Nilai: {value}"
+                f"⚙️ Perubahan setting\n👤 User #{user_number}\n🔢 Setting #{setting_number}\n"
+                f"User ID: {user_id}\nAksi: {action}\nNilai: {value}"
             )
         except Exception:
             log.exception("Failed to notify admin about user setting change")
@@ -114,27 +110,46 @@ class BotApp:
             custom = await self.db.get_custom_settings(uid)
             base_url = custom["base_url"] or (profile.base_url if profile else self.settings.ai_base_url)
             api_key = custom["api_key"] or (profile.api_key if profile else self.settings.ai_api_key)
-            if any(part.get("type") == "image_url" for part in content if isinstance(part, dict)) and profile and "vision" not in profile.capabilities:
+            has_image = any(
+                isinstance(part, dict) and part.get("type") == "image_url"
+                for part in content if isinstance(content, list)
+            )
+            if has_image and profile and "vision" not in profile.capabilities:
                 await message.answer("Provider yang dipilih tidak mendukung vision/image.")
                 return
             provider = self.providers.provider(provider_name, base_url_override=base_url, api_key_override=api_key)
             selected_model = await self.db.get_model(uid)
             status = await message.answer("⏳ Memproses...")
-            chunks = []
+            full_text = ""
+            pending = ""
+            last_update = 0
             try:
                 async for chunk in provider.stream(messages, selected_model):
-                    chunks.append(chunk)
-                    if sum(len(x) for x in chunks) >= 250:
-                        preview = "".join(chunks)
-                        await status.edit_text(f"⏳ {preview[-3900:]}")
-                        chunks.clear()
-                result_text = "".join(chunks)
+                    full_text += chunk
+                    pending += chunk
+                    if len(pending) >= 250:
+                        preview = full_text[-3900:]
+                        try:
+                            await status.edit_text(f"⏳ {preview}")
+                            last_update = len(full_text)
+                            pending = ""
+                        except Exception:
+                            log.debug("Telegram streaming edit skipped", exc_info=True)
+                result_text = full_text
+                if pending and len(full_text) != last_update:
+                    try:
+                        await status.edit_text(f"⏳ {full_text[-3900:]}")
+                    except Exception:
+                        pass
             except ProviderError:
                 raise
             if not result_text:
                 fallback = await provider.chat(messages, selected_model)
                 result_text = fallback.text
-            await status.delete()
+            try:
+                await status.delete()
+            except Exception:
+                pass
         except ProviderError as exc:
             await message.answer(str(exc))
             return
@@ -160,114 +175,60 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("start"))
     async def start(message: Message):
-        await message.answer(
-            "TeleChatBot aktif.\n"
-            "Kirim pesan untuk mulai chat.\n"
-            "/myid — lihat Telegram user ID kamu\n"
-            "/provider — pilih provider\n"
-            "/model <nama> — pilih model\n"
-            "/baseurl <URL> — custom Base URL\n"
-            "/apikey <KEY> — custom API key\n"
-            "/settings — lihat pengaturan\n"
-            "/status — lihat konfigurasi aktif\n"
-            "/clear — hapus riwayat."
-        )
+        await message.answer("TeleChatBot aktif.\nKirim pesan untuk mulai chat.\n/myid — lihat Telegram user ID kamu\n/provider — pilih provider\n/model <nama> — pilih model\n/baseurl <URL> — custom Base URL\n/apikey <KEY> — custom API key\n/settings — lihat pengaturan\n/status — lihat konfigurasi aktif\n/clear — hapus riwayat.")
 
     @router.message(Command("myid"))
     async def myid(message: Message):
-        if not message.from_user:
-            return
-        await message.answer(f"Telegram User ID kamu: {message.from_user.id}")
+        if message.from_user:
+            await message.answer(f"Telegram User ID kamu: {message.from_user.id}")
 
     @router.message(Command("help"))
     async def help_cmd(message: Message):
-        await message.answer(
-            "/start — mulai\n"
-            "/myid — lihat Telegram user ID kamu\n"
-            "/provider <nama> — pilih provider preset\n"
-            "/model <model> — pilih model\n"
-            "/baseurl <URL> — set custom Base URL\n"
-            "/apikey <KEY> — set custom API key\n"
-            "/settings — lihat pengaturan custom\n"
-            "/resetsettings — hapus custom Base URL & API key\n"
-            "/status — status provider\n"
-            "/clear — hapus riwayat\n"
-            "Kirim teks, foto, PDF, dokumen, audio, atau video."
-        )
+        await message.answer("/start — mulai\n/myid — lihat Telegram user ID kamu\n/provider <nama> — pilih provider preset\n/model <model> — pilih model\n/baseurl <URL> — set custom Base URL\n/apikey <KEY> — set custom API key\n/settings — lihat pengaturan custom\n/resetsettings — hapus custom Base URL & API key\n/status — status provider\n/clear — hapus riwayat\nKirim teks, foto, PDF, dokumen, audio, atau video.")
 
     @router.message(Command("settings"))
     async def settings_cmd(message: Message):
-        if not message.from_user:
-            return
+        if not message.from_user: return
         uid = message.from_user.id
         provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
         profile = app.providers.profile(provider_name)
-        try:
-            custom = await app.db.get_custom_settings(uid)
+        try: custom = await app.db.get_custom_settings(uid)
         except RuntimeError as exc:
-            await message.answer(f"Gagal membaca custom settings: {exc}")
-            return
+            await message.answer(f"Gagal membaca custom settings: {exc}"); return
         model = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model or "(default provider)"
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
-        await message.answer(
-            "Pengaturan AI kamu:\n"
-            f"Provider: {provider_name}\n"
-            f"Base URL: {base_url}\n"
-            f"API Key: {mask_api_key(custom['api_key'])}\n"
-            f"Model: {model}\n\n"
-            "Perintah:\n"
-            "/baseurl <URL>\n"
-            "/apikey <KEY>\n"
-            "/model <MODEL>\n"
-            "/resetsettings"
-        )
+        await message.answer(f"Pengaturan AI kamu:\nProvider: {provider_name}\nBase URL: {base_url}\nAPI Key: {mask_api_key(custom['api_key'])}\nModel: {model}\n\nPerintah:\n/baseurl <URL>\n/apikey <KEY>\n/model <MODEL>\n/resetsettings")
 
     @router.message(Command("status"))
     async def status(message: Message):
-        if not message.from_user:
-            return
+        if not message.from_user: return
         uid = message.from_user.id
         model = await app.db.get_model(uid)
         provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
         profile = app.providers.profile(provider_name)
-        try:
-            custom = await app.db.get_custom_settings(uid)
+        try: custom = await app.db.get_custom_settings(uid)
         except RuntimeError as exc:
-            await message.answer(f"Gagal membaca custom settings: {exc}")
-            return
+            await message.answer(f"Gagal membaca custom settings: {exc}"); return
         selected = model or (profile.default_model if profile else "") or app.settings.ai_model or "(belum diset)"
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
-        await message.answer(
-            f"Provider: {provider_name}\n"
-            f"Base URL: {base_url}\n"
-            f"API Key: {'custom' if custom['api_key'] else 'provider/default'}\n"
-            f"Model: {selected}\n"
-            f"Capabilities: {', '.join(sorted(profile.capabilities)) if profile else 'text'}\n"
-            f"Mode: {app.settings.telegram_mode}"
-        )
+        await message.answer(f"Provider: {provider_name}\nBase URL: {base_url}\nAPI Key: {'custom' if custom['api_key'] else 'provider/default'}\nModel: {selected}\nCapabilities: {', '.join(sorted(profile.capabilities)) if profile else 'text'}\nMode: {app.settings.telegram_mode}")
 
     @router.message(Command("clear"))
     async def clear(message: Message):
-        if message.from_user:
-            await app.db.clear(message.from_user.id)
+        if message.from_user: await app.db.clear(message.from_user.id)
         await message.answer("Riwayat percakapan dihapus.")
 
     @router.message(Command("provider"))
     async def provider(message: Message):
-        if not message.from_user:
-            return
+        if not message.from_user: return
         parts = (message.text or "").split(maxsplit=1)
         current = await app.db.get_provider(message.from_user.id)
         if len(parts) == 1:
-            names = app.providers.names()
-            await message.answer("Provider tersedia:\n" + "\n".join(
-                f"• {n}" + (" ← aktif" if n == (current or app.settings.ai_default_provider) else "") for n in names
-            ))
+            await message.answer("Provider tersedia:\n" + "\n".join(f"• {n}" + (" ← aktif" if n == (current or app.settings.ai_default_provider) else "") for n in app.providers.names()))
             return
         value = parts[1].strip()
         if value not in app.providers.names():
-            await message.answer("Provider tidak ditemukan. Ketik /provider untuk melihat daftar.")
-            return
+            await message.answer("Provider tidak ditemukan. Ketik /provider untuk melihat daftar."); return
         await app.db.set_provider(message.from_user.id, value)
         profile = app.providers.profile(value)
         await app.notify_admin(message.from_user.id, "PROVIDER", value, message)
@@ -275,8 +236,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("model"))
     async def model(message: Message):
-        if not message.from_user:
-            return
+        if not message.from_user: return
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) == 1:
             current = await app.db.get_model(message.from_user.id)
@@ -291,47 +251,35 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("baseurl"))
     async def baseurl(message: Message):
-        if not message.from_user:
-            return
+        if not message.from_user: return
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) == 1:
-            try:
-                custom = await app.db.get_custom_settings(message.from_user.id)
+            try: custom = await app.db.get_custom_settings(message.from_user.id)
             except RuntimeError as exc:
-                await message.answer(f"Gagal membaca custom settings: {exc}")
-                return
-            await message.answer(f"Custom Base URL: {custom['base_url'] or '(belum diset; memakai provider preset)'}")
-            return
+                await message.answer(f"Gagal membaca custom settings: {exc}"); return
+            await message.answer(f"Custom Base URL: {custom['base_url'] or '(belum diset; memakai provider preset)'}"); return
         value = parts[1].strip().rstrip("/")
         if not valid_base_url(value):
-            await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1")
-            return
+            await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1"); return
         await app.db.set_custom_base_url(message.from_user.id, value)
         await app.notify_admin(message.from_user.id, "BASE URL", value, message)
         await message.answer(f"Custom Base URL disimpan:\n{value}\n\nEndpoint harus kompatibel dengan OpenAI Chat Completions (/chat/completions).")
 
     @router.message(Command("apikey"))
     async def apikey(message: Message):
-        if not message.from_user:
-            return
+        if not message.from_user: return
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) == 1:
-            try:
-                custom = await app.db.get_custom_settings(message.from_user.id)
+            try: custom = await app.db.get_custom_settings(message.from_user.id)
             except RuntimeError as exc:
-                await message.answer(f"Gagal membaca custom API key: {exc}")
-                return
-            await message.answer(f"Custom API key: {mask_api_key(custom['api_key'])}")
-            return
+                await message.answer(f"Gagal membaca custom API key: {exc}"); return
+            await message.answer(f"Custom API key: {mask_api_key(custom['api_key'])}"); return
         value = parts[1].strip()
         if len(value) < 4:
-            await message.answer("API key terlalu pendek.")
-            return
-        try:
-            await app.db.set_custom_api_key(message.from_user.id, value)
+            await message.answer("API key terlalu pendek."); return
+        try: await app.db.set_custom_api_key(message.from_user.id, value)
         except RuntimeError as exc:
-            await message.answer(f"Gagal menyimpan API key: {exc}")
-            return
+            await message.answer(f"Gagal menyimpan API key: {exc}"); return
         await app.notify_admin(message.from_user.id, "API KEY", value, message)
         await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
 
