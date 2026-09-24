@@ -10,7 +10,6 @@ from .config import get_settings
 from .db import Database
 from .file_parser import FileParser
 from .providers.registry import ProviderRegistry
-from .providers.attachments import AttachmentAdapter
 from .providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
@@ -42,7 +41,6 @@ class BotApp:
         self.db = db
         self.attachments = AttachmentManager(bot)
         self.parser = FileParser(get_settings().attachment_max_prompt_chars)
-        self.attachment_adapter = AttachmentAdapter(self.parser)
         self.providers = ProviderRegistry()
         self.settings = get_settings()
 
@@ -81,25 +79,9 @@ class BotApp:
         try:
             content = text
             attachment_note = ""
-            if attachments:
-                mapping = self.attachment_adapter.map(attachments, text)
-                content = mapping.parts
-                attachment_note = mapping.note
-
-            if not content:
+            if not content and not attachments:
                 await message.answer("Kirim teks atau lampiran yang ingin diproses.")
                 return
-
-            await self.db.add_message(uid, "user", text or attachment_note or "[attachment]")
-            history = await self.db.history(uid, self.settings.ai_max_history_messages)
-            if history:
-                history[-1]["content"] = content
-
-            messages = (
-                [{"role": "system", "content": self.settings.ai_system_prompt}]
-                if self.settings.ai_system_prompt else []
-            )
-            messages.extend(history)
 
             try:
                 provider_name = await self.db.get_provider(uid)
@@ -140,6 +122,18 @@ class BotApp:
                     base_url_override=base_url,
                     api_key_override=api_key,
                 )
+                mapping = provider.map_attachments(attachments, text)
+                content = mapping.parts or text
+                attachment_note = mapping.note
+                await self.db.add_message(uid, "user", text or attachment_note or "[attachment]")
+                history = await self.db.history(uid, self.settings.ai_max_history_messages)
+                if history:
+                    history[-1]["content"] = content
+                messages = (
+                    [{"role": "system", "content": self.settings.ai_system_prompt}]
+                    if self.settings.ai_system_prompt else []
+                )
+                messages.extend(history)
                 selected_model = await self.db.get_model(uid)
                 status = await message.answer("⏳ Memproses...")
                 full_text = ""
