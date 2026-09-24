@@ -54,7 +54,7 @@ def test_registry_parses_attachment_modes(monkeypatch):
     ) == "transcribe"
 
 
-@pytest.mark.parametrize("mode", ["unknown", "", "NATIVE "])
+@pytest.mark.parametrize("mode", ["unknown", "", "native-ish"])
 def test_registry_rejects_invalid_attachment_mode(monkeypatch, mode):
     _reset_settings(monkeypatch)
     monkeypatch.setenv(
