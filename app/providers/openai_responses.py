@@ -103,7 +103,6 @@ class OpenAIResponsesProvider(AIProvider):
 
                 if mode == "disabled":
                     routing.append(f"{filename}: disabled")
-                    routing.append(f"{filename}: disabled")
                     warnings.append(f"{filename}: mode attachment dinonaktifkan.")
                     if progress:
                         await progress(index, total, item, "failed")
@@ -149,7 +148,6 @@ class OpenAIResponsesProvider(AIProvider):
                         f"[Native file: {filename}; MIME: {item.mime_type or 'unknown'}]"
                     )
                     routing.append(f"{filename}: native")
-                    routing.append(f"{filename}: native")
                     if progress:
                         await progress(index, total, item, "ready")
                     continue
@@ -159,7 +157,6 @@ class OpenAIResponsesProvider(AIProvider):
                     parts.extend(fallback.parts)
                     notes.append(fallback.note)
                     warnings.extend(fallback.warnings)
-                    routing.append(f"{filename}: fallback")
                     routing.append(f"{filename}: fallback")
                     if progress:
                         await progress(index, total, item, "ready")
@@ -176,7 +173,6 @@ class OpenAIResponsesProvider(AIProvider):
                         parts=[],
                         note="",
                         remote_file_ids=list(remote_file_ids),
-                        routing=list(routing),
                     )
                 )
             raise
@@ -186,7 +182,6 @@ class OpenAIResponsesProvider(AIProvider):
             note="\n".join(notes),
             warnings=warnings,
             remote_file_ids=remote_file_ids,
-            routing=routing,
         )
 
     async def cleanup_attachments(self, mapping):
