@@ -1,4 +1,6 @@
 import json
+import os
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,7 +52,7 @@ class ProviderRegistry:
                 name=name,
                 protocol=str(cfg.get("protocol","openai_chat_completions")),
                 base_url=str(cfg.get("base_url","")).strip(),
-                api_key=str(cfg.get("api_key","")).strip(),
+                api_key=self._resolve_secret(str(cfg.get("api_key","")).strip()),
                 default_model=str(cfg.get("default_model","")).strip(),
                 extra_body=cfg.get("extra_body") if isinstance(cfg.get("extra_body"),dict) else {},
                 capabilities=frozenset(cfg.get("capabilities",["text"])),
@@ -58,6 +60,11 @@ class ProviderRegistry:
         if not profiles:
             raise ProviderConfigurationError("AI_PROVIDERS_JSON tidak memiliki provider yang valid.")
         return profiles
+
+    def _resolve_secret(self, value):
+        if value.startswith("$") and re.fullmatch(r"\$[A-Za-z_][A-Za-z0-9_]*", value):
+            return os.getenv(value[1:], "")
+        return value
 
     def _extra_body(self):
         if not self.settings.ai_extra_body_json:
@@ -73,7 +80,7 @@ class ProviderRegistry:
 
     def provider(self,name=None) -> AIProvider:
         selected=name or self.settings.ai_default_provider
-        profile=self._profiles.get(selected) or self._profiles.get("default")
+        profile=self._profiles.get(selected) or self._profiles.get("default") or next(iter(self._profiles.values()), None)
         if not profile:
             raise ProviderConfigurationError(f"Provider '{selected}' tidak ditemukan.")
         if profile.protocol != "openai_chat_completions":
@@ -82,4 +89,4 @@ class ProviderRegistry:
 
     def profile(self,name=None):
         selected=name or self.settings.ai_default_provider
-        return self._profiles.get(selected) or self._profiles.get("default")
+        return self._profiles.get(selected) or self._profiles.get("default") or next(iter(self._profiles.values()), None)
