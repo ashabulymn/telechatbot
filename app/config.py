@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     ai_timeout_seconds: float = 120
     ai_max_history_messages: int = 20
     ai_system_prompt: str = ""
+    ai_transcription_model: str = "gpt-4o-mini-transcribe"
 
     database_path: str = "/app/data/telechatbot.db"
     custom_settings_encryption_key: str = ""
