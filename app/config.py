@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     ai_base_url: str = "https://api.openai.com/v1"
     ai_api_key: str = ""
     ai_model: str = ""
+    ai_default_provider: str = "default"
+    ai_providers_json: str = ""
     ai_extra_body_json: str = ""
     ai_timeout_seconds: float = 120
     ai_max_history_messages: int = 20
