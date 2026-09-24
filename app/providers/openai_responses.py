@@ -109,7 +109,7 @@ class OpenAIResponsesProvider(AIProvider):
                     if progress:
                         await progress(index, total, item, "uploading")
                     file_id = await self.upload_attachment(item)
-                except ProviderError as exc:
+                except Exception as exc:
                     warning = f"{filename}: upload native gagal ({str(exc)[:180]}). Dipakai fallback."
                     warnings.append(warning)
                     if progress:
@@ -159,13 +159,16 @@ class OpenAIResponsesProvider(AIProvider):
                         f"{base}/files/{file_id}", headers=headers
                     )
                     if response.is_error:
-                        log_message = f"Provider file cleanup failed: {response.status_code}"
-                        import logging
-                        logging.getLogger(__name__).warning(log_message)
+                        log.warning(
+                            "Provider file cleanup failed: status=%s file_id=%s",
+                            response.status_code,
+                            file_id,
+                        )
                 except httpx.HTTPError:
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        "Provider file cleanup request failed", exc_info=True
+                    log.warning(
+                        "Provider file cleanup request failed: file_id=%s",
+                        file_id,
+                        exc_info=True,
                     )
 
     async def upload_attachment(self, attachment: Attachment):
