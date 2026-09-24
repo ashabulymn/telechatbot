@@ -271,3 +271,65 @@ def test_responses_native_upload_respects_model_capabilities(tmp_path):
         )
     )
     assert provider.supports_native_upload(item) is False
+
+
+def test_responses_prepare_skips_disabled_image(tmp_path):
+    from app.attachments import Attachment
+
+    path = tmp_path / "photo.jpg"
+    path.write_bytes(b"fake-image")
+    item = Attachment(
+        kind="image",
+        file_id="img-1",
+        filename="photo.jpg",
+        mime_type="image/jpeg",
+        path=str(path),
+    )
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "vision", "file"}),
+            attachment_modes={"image": "disabled"},
+        )
+    )
+
+    async def run():
+        return await provider.prepare_attachments([item])
+
+    import asyncio
+    mapping = asyncio.run(run())
+    assert mapping.parts == []
+    assert any("dinonaktifkan" in warning for warning in mapping.warnings)
+
+
+def test_responses_prepare_skips_image_when_model_lacks_vision(tmp_path):
+    from app.attachments import Attachment
+
+    path = tmp_path / "photo.jpg"
+    path.write_bytes(b"fake-image")
+    item = Attachment(
+        kind="image",
+        file_id="img-1",
+        filename="photo.jpg",
+        mime_type="image/jpeg",
+        path=str(path),
+    )
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "vision", "file"}),
+            model_capabilities=frozenset({"text"}),
+            model_capabilities_known=True,
+        )
+    )
+
+    import asyncio
+    mapping = asyncio.run(provider.prepare_attachments([item]))
+    assert mapping.parts == []
+    assert any("vision" in warning for warning in mapping.warnings)
