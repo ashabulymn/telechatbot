@@ -269,3 +269,42 @@ async def test_responses_provider_cleans_remote_files_when_preparation_aborts(tm
 
     assert uploaded == ["remote-1"]
     assert deleted == ["remote-1"]
+
+
+@pytest.mark.asyncio
+async def test_responses_provider_transcribes_media_when_native_upload_fails(tmp_path, monkeypatch):
+    from app.providers.openai_responses import OpenAIResponsesProvider
+    from app.providers.registry_types import ProviderRuntime
+    from app.attachments import Attachment
+
+    path = tmp_path / "voice.ogg"
+    path.write_bytes(b"audio")
+    item = Attachment(
+        kind="audio",
+        file_id="1",
+        filename="voice.ogg",
+        mime_type="audio/ogg",
+        path=str(path),
+    )
+    provider = OpenAIResponsesProvider(
+        ProviderRuntime(
+            name="x",
+            base_url="https://example.com/v1",
+            api_key="key",
+            default_model="model",
+            capabilities=frozenset({"text", "file", "audio", "transcription"}),
+        )
+    )
+
+    async def fail_upload(attachment):
+        raise ProviderError("simulated upload failure")
+
+    async def transcript(attachment):
+        return "hello from voice"
+
+    monkeypatch.setattr(provider, "upload_attachment", fail_upload)
+    monkeypatch.setattr(provider, "transcribe_attachment", transcript)
+
+    mapped = await provider.prepare_attachments([item])
+    assert "hello from voice" in mapped.parts[0]["text"]
+    assert any("transkripsi sebagai fallback" in warning for warning in mapped.warnings)
