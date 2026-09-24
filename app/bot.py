@@ -275,7 +275,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("start"))
     async def start(message: Message):
-        await message.answer("TeleChatBot aktif.\nKirim pesan untuk mulai chat.\n/myid — lihat Telegram user ID kamu\n/provider — pilih provider\n/model <nama> — pilih model\n/baseurl <URL> — custom Base URL\n/protocol <protocol> — custom protocol\n/capabilities <list> — custom capabilities\n/apikey <KEY> — custom API key\n/settings — lihat pengaturan\n/status — lihat konfigurasi aktif\n/clear — hapus riwayat.")
+        await message.answer("TeleChatBot aktif.\nKirim pesan untuk mulai chat.\n/myid — lihat Telegram user ID kamu\n/provider — pilih provider\n/model <nama> — pilih model\n/models — ambil daftar model dari provider\n/baseurl <URL> — custom Base URL\n/protocol <protocol> — custom protocol\n/capabilities <list> — custom capabilities\n/apikey <KEY> — custom API key\n/settings — lihat pengaturan\n/status — lihat konfigurasi aktif\n/clear — hapus riwayat.")
 
     @router.message(Command("myid"))
     async def myid(message: Message):
@@ -283,7 +283,7 @@ def register_handlers(dp: Dispatcher, app: BotApp):
 
     @router.message(Command("help"))
     async def help_cmd(message: Message):
-        await message.answer("/start — mulai\n/myid — lihat Telegram user ID kamu\n/provider <nama> — pilih provider preset\n/model <model> — pilih model\n/baseurl <URL> — set custom Base URL\n/protocol <protocol> — set custom protocol\n/capabilities <list> — set custom capabilities\n/apikey <KEY> — set custom API key\n/settings — lihat pengaturan custom\n/resetsettings — hapus custom Base URL & API key\n/status — status provider\n/clear — hapus riwayat\nKirim teks, foto, PDF, dokumen, audio, atau video.")
+        await message.answer("/start — mulai\n/myid — lihat Telegram user ID kamu\n/provider <nama> — pilih provider preset\n/model <model> — pilih model\n/models — daftar model dari provider\n/baseurl <URL> — set custom Base URL\n/protocol <protocol> — set custom protocol\n/capabilities <list> — set custom capabilities\n/apikey <KEY> — set custom API key\n/settings — lihat pengaturan custom\n/resetsettings — hapus custom Base URL & API key\n/status — status provider\n/clear — hapus riwayat\nKirim teks, foto, PDF, dokumen, audio, atau video.")
 
     @router.message(Command("settings"))
     async def settings_cmd(message: Message):
@@ -339,6 +339,45 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         await app.notify_admin(message.from_user.id, "PROVIDER", value, message)
         await message.answer(f"Provider diubah ke: {value}\nModel default: {profile.default_model or '(belum diset)'}")
 
+    @router.message(Command("models"))
+    async def models(message: Message):
+        if not message.from_user: return
+        uid = message.from_user.id
+        provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
+        profile = app.providers.profile(provider_name)
+        try:
+            custom = await app.db.get_custom_settings(uid)
+            provider = app.providers.provider(
+                provider_name,
+                base_url_override=custom["base_url"] or None,
+                api_key_override=custom["api_key"] or None,
+                protocol_override=custom["protocol"] or None,
+                capabilities_override=custom["capabilities"] or None,
+            )
+            available = await provider.list_models()
+        except ProviderError as exc:
+            await message.answer(f"Gagal mengambil daftar model: {exc}")
+            return
+        except Exception:
+            log.exception("Model discovery failed")
+            await message.answer("Gagal mengambil daftar model dari provider.")
+            return
+        if not available:
+            await message.answer(
+                "Provider `" + provider_name + "` tidak mengembalikan daftar model otomatis.\n"
+                "Gunakan /model <nama-model> secara manual."
+            )
+            return
+        current = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model
+        lines = ["Model tersedia — " + provider_name + ":", ""]
+        for name in available[:50]:
+            marker = " ← aktif" if name == current else ""
+            lines.append("• " + name + marker)
+        if len(available) > 50:
+            lines.append("\nMenampilkan 50 dari " + str(len(available)) + " model.")
+        lines.append("\nPilih dengan: /model <nama-model>")
+        await message.answer("\n".join(lines))
+
     @router.message(Command("model"))
     async def model(message: Message):
         if not message.from_user: return
@@ -347,7 +386,11 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             current = await app.db.get_model(message.from_user.id)
             provider_name = await app.db.get_provider(message.from_user.id) or app.settings.ai_default_provider
             profile = app.providers.profile(provider_name)
-            await message.answer(f"Model saat ini: {current or (profile.default_model if profile else '') or app.settings.ai_model or '(default provider)'}"); return
+            await message.answer(
+                f"Model saat ini: {current or (profile.default_model if profile else '') or app.settings.ai_model or '(default provider)'}\n"
+                "Gunakan /models untuk melihat model yang tersedia."
+            )
+            return
         value = parts[1].strip()
         await app.db.set_model(message.from_user.id, value)
         await app.notify_admin(message.from_user.id, "MODEL", value, message)
