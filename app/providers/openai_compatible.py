@@ -1,5 +1,6 @@
 import json
 from typing import AsyncIterator
+from urllib.parse import urlparse
 
 import httpx
 
@@ -26,18 +27,16 @@ class OpenAICompatibleProvider(AIProvider):
         selected = model or self.runtime.default_model
         if not selected:
             raise ProviderConfigurationError("Model provider belum dikonfigurasi.")
-        if not self.runtime.base_url:
-            raise ProviderConfigurationError("Base URL provider belum dikonfigurasi.")
-
-        url = self.runtime.base_url.rstrip("/") + "/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.runtime.api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {"model": selected, "messages": messages}
-        payload.update(self.runtime.extra_body)
-        if stream:
-            payload["stream"] = True
+        base_url = self.runtime.base_url.strip().rstrip("/")
+        parsed = urlparse(base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ProviderConfigurationError("Base URL provider tidak valid.")
+        url = base_url + "/chat/completions"
+        headers = {"Authorization": f"Bearer {self.runtime.api_key}", "Content-Type": "application/json"}
+        payload = dict(self.runtime.extra_body)
+        payload["model"] = selected
+        payload["messages"] = messages
+        payload["stream"] = bool(stream)
         return url, headers, payload
 
     async def chat(self, messages, model=None):
@@ -49,10 +48,8 @@ class OpenAICompatibleProvider(AIProvider):
             raise ProviderError("Provider AI timeout.") from exc
         except httpx.HTTPError as exc:
             raise ProviderError("Provider AI tidak dapat dihubungi.") from exc
-
         if response.is_error:
             raise self._http_error(response)
-
         try:
             data = response.json()
         except ValueError as exc:
@@ -63,8 +60,7 @@ class OpenAICompatibleProvider(AIProvider):
         content = (choices[0].get("message") or {}).get("content", "")
         if isinstance(content, list):
             content = "".join(
-                part.get("text", "")
-                for part in content
+                part.get("text", "") for part in content
                 if isinstance(part, dict) and part.get("type") == "text"
             )
         return ProviderResponse(str(content), data)
@@ -76,8 +72,15 @@ class OpenAICompatibleProvider(AIProvider):
                 async with client.stream("POST", url, headers=headers, json=payload) as response:
                     if response.is_error:
                         body = await response.aread()
-                        response._content = body
-                        raise self._http_error(response)
+                        try:
+                            data = json.loads(body.decode("utf-8", errors="replace"))
+                            detail = data.get("error", {}).get("message", "")
+                        except Exception:
+                            detail = ""
+                        raise ProviderError(
+                            f"Provider AI HTTP {response.status_code}" +
+                            (f": {str(detail)[:300]}" if detail else ".")
+                        )
                     async for line in response.aiter_lines():
                         if not line or not line.startswith("data:"):
                             continue
