@@ -98,6 +98,12 @@ class BotApp:
                 base_url = custom["base_url"] or profile.base_url
                 api_key = custom["api_key"] or profile.api_key
 
+                provider = self.providers.provider(
+                    provider_name,
+                    base_url_override=base_url,
+                    api_key_override=api_key,
+                )
+
                 if any(provider.attachment_mode(item) == "disabled" for item in attachments):
                     disabled = [item.filename or item.kind for item in attachments if provider.attachment_mode(item) == "disabled"]
                     await message.answer("Provider ini menonaktifkan lampiran: " + ", ".join(disabled[:5]))
@@ -114,11 +120,6 @@ class BotApp:
                     )
                     return
 
-                provider = self.providers.provider(
-                    provider_name,
-                    base_url_override=base_url,
-                    api_key_override=api_key,
-                )
                 status = await message.answer(
                     "📎 Menyiapkan lampiran..." if attachments else "⏳ Memproses..."
                 )
