@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from ..attachments import Attachment
-from .attachments import AttachmentMapping
+from .attachments import AttachmentMapping, ProgressCallback
 
 
 @dataclass
@@ -36,7 +36,20 @@ class AIProvider(ABC):
         parser = FileParser(settings.attachment_max_prompt_chars)
         return AttachmentAdapter(parser).map(attachments, text)
 
-    async def prepare_attachments(\n        self, attachments: list[Attachment], text: str = ""\n    ) -> AttachmentMapping:\n        """Prepare attachments, optionally using the provider native API."""\n        return self.map_attachments(attachments, text)\n\n    async def upload_attachment(self, attachment: Attachment) -> str | None:\n        """Optional native upload hook.
+    async def prepare_attachments(
+        self,
+        attachments: list[Attachment],
+        text: str = "",
+        progress: ProgressCallback | None = None,
+    ) -> AttachmentMapping:
+        """Prepare attachments, optionally using provider native APIs."""
+        if progress:
+            for index, item in enumerate(attachments, 1):
+                await progress(index, len(attachments), item, "preparing")
+        return self.map_attachments(attachments, text)
+
+    async def upload_attachment(self, attachment: Attachment) -> str | None:
+        """Optional native upload hook.
 
         Providers with a native file API can override this. Returning None is
         intentional: generic OpenAI-compatible providers must not assume that
