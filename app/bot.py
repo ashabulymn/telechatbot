@@ -11,6 +11,7 @@ from .db import Database
 from .file_parser import FileParser
 from .providers.registry import ProviderRegistry
 from .providers.errors import ProviderError
+from .providers.routing import plan_attachment_routes, route_summary
 
 log = logging.getLogger(__name__)
 router = Router()
@@ -165,9 +166,30 @@ class BotApp:
                         model_capabilities_known=True,
                     )
 
+                routes = plan_attachment_routes(
+                    provider,
+                    attachments,
+                    model_capabilities=(model_info.capabilities if model_info else frozenset()),
+                    model_capabilities_known=bool(model_info and model_info.capabilities_known),
+                )
+                disabled_routes = [route for route in routes if route.route == "disabled"]
+                if disabled_routes:
+                    await message.answer(
+                        "Provider ini menonaktifkan lampiran: "
+                        + ", ".join((r.attachment.filename or r.attachment.kind) for r in disabled_routes[:5])
+                    )
+                    return
+
                 status = await message.answer(
                     "📎 Menyiapkan lampiran..." if attachments else "⏳ Memproses..."
                 )
+                if attachments:
+                    try:
+                        await status.edit_text(
+                            "📎 Routing lampiran:\n" + route_summary(routes)
+                        )
+                    except Exception:
+                        pass
                 if attachments:
                     try:
                         await status.edit_text(
@@ -193,17 +215,10 @@ class BotApp:
 
                 transcriptions = []
                 remaining_attachments = []
+                route_by_id = {id(route.attachment): route for route in routes}
                 for item in attachments:
-                    should_transcribe = (
-                        item.kind in {"audio", "video"}
-                        and provider.attachment_mode(item) != "disabled"
-                        and provider.supports_transcription(item)
-                        and (
-                            not model_info
-                            or not model_info.capabilities_known
-                            or item.kind not in model_info.capabilities
-                        )
-                    )
+                    route = route_by_id[id(item)]
+                    should_transcribe = route.route == "transcribe"
                     if should_transcribe:
                         try:
                             await status.edit_text(
@@ -225,12 +240,7 @@ class BotApp:
                             transcriptions.append(
                                 f"[Transkripsi {item.filename or item.kind}]\n{transcript}"
                             )
-                            if item.kind == "audio" or (
-                                item.kind == "video"
-                                and model_info
-                                and model_info.capabilities_known
-                                and "video" not in model_info.capabilities
-                            ):
+                            if route.route == "transcribe":
                                 try:
                                     await status.edit_text(
                                         f"✅ {item.filename or item.kind} → transkripsi → teks"
