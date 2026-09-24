@@ -1,0 +1,25 @@
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    telegram_bot_token: str
+    telegram_mode: str = "polling"
+    telegram_webhook_url: str | None = None
+    telegram_webhook_secret: str | None = None
+    telegram_webhook_host: str = "0.0.0.0"
+    telegram_webhook_port: int = 8080
+    ai_base_url: str = "https://api.openai.com/v1"
+    ai_api_key: str = ""
+    ai_model: str = ""
+    ai_timeout_seconds: float = 120
+    ai_max_history_messages: int = 20
+    ai_system_prompt: str = "You are a helpful AI assistant."
+    database_path: str = "/app/data/telechatbot.db"
+    attachment_max_mb: int = 20
+    attachment_dir: str = "/app/data/attachments"
+    log_level: str = "INFO"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
