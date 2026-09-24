@@ -374,9 +374,13 @@ class BotApp:
             except ProviderError as exc:
                 await message.answer(str(exc))
                 return
-            except Exception:
+            except Exception as exc:
                 log.exception("Unexpected AI request failure")
-                await message.answer("Terjadi error saat menghubungi provider AI.")
+                detail = str(exc).strip()
+                await message.answer(
+                    "Terjadi error saat menghubungi provider AI."
+                    + (f"\nDetail: {detail[:500]}" if detail else "")
+                )
                 return
 
             await self.db.add_message(uid, "assistant", result_text)
