@@ -50,26 +50,30 @@ class AttachmentManager:
 
     async def collect(self, message: Message):
         items = []
-        if message.photo:
-            obj = message.photo[-1]
-            path = await self._download(obj.file_id, "photo.jpg", getattr(obj, "file_size", None))
-            items.append(Attachment("image", obj.file_id, "photo.jpg", "image/jpeg", path))
+        try:
+            if message.photo:
+                obj = message.photo[-1]
+                path = await self._download(obj.file_id, "photo.jpg", getattr(obj, "file_size", None))
+                items.append(Attachment("image", obj.file_id, "photo.jpg", "image/jpeg", path))
 
-        for attr, kind in [
-            ("document", "document"),
-            ("audio", "audio"),
-            ("video", "video"),
-            ("voice", "audio"),
-        ]:
-            obj = getattr(message, attr, None)
-            if not obj:
-                continue
-            original = getattr(obj, "file_name", None) or f"{kind}_{obj.file_id}"
-            mime = getattr(obj, "mime_type", None) or mimetypes.guess_type(original)[0]
-            safe_name = self._safe_filename(original)
-            path = await self._download(obj.file_id, safe_name, getattr(obj, "file_size", None))
-            items.append(Attachment(kind, obj.file_id, original, mime, path))
-        return items
+            for attr, kind in [
+                ("document", "document"),
+                ("audio", "audio"),
+                ("video", "video"),
+                ("voice", "audio"),
+            ]:
+                obj = getattr(message, attr, None)
+                if not obj:
+                    continue
+                original = getattr(obj, "file_name", None) or f"{kind}_{obj.file_id}"
+                mime = getattr(obj, "mime_type", None) or mimetypes.guess_type(original)[0]
+                safe_name = self._safe_filename(original)
+                path = await self._download(obj.file_id, safe_name, getattr(obj, "file_size", None))
+                items.append(Attachment(kind, obj.file_id, original, mime, path))
+            return items
+        except Exception:
+            self.cleanup(items)
+            raise
 
     def _safe_filename(self, filename):
         name = Path(filename).name
