@@ -93,7 +93,31 @@ Protocol yang tersedia saat ini:
 
 > Catatan: kemampuan attachment tidak otomatis berarti provider benar-benar mendukungnya. `capabilities` harus mencerminkan kemampuan endpoint yang digunakan.
 
-### 3. Enkripsi API key custom user
+### 3. 9Router
+
+TeleChatBot **sudah kompatibel dengan 9Router** melalui protocol `openai_chat_completions`. 9Router menyediakan endpoint OpenAI-compatible, sehingga tidak memerlukan adapter khusus di kode TeleChatBot. Dokumentasi 9Router mencantumkan Base URL cloud `https://9router.com/v1`, self-hosted `http://localhost:20128/v1`, serta model dengan pola seperti `cc/*`, `cx/*`, dan `glm/*`. citeturn0search1turn0search5
+
+Contoh cloud:
+
+```env
+NINEROUTER_API_KEY=ISI_API_KEY_9ROUTER
+AI_PROVIDERS_JSON={"9router":{"protocol":"openai_chat_completions","base_url":"https://9router.com/v1","api_key":"$NINEROUTER_API_KEY","default_model":"cc/claude-sonnet-4-20250514","capabilities":["text","vision"],"attachment_modes":{"image":"auto","document":"fallback","pdf":"fallback","audio":"fallback","video":"fallback"}}}
+AI_DEFAULT_PROVIDER=9router
+```
+
+Setelah deploy, user dapat memakai:
+
+```text
+/provider 9router
+/model cc/claude-sonnet-4-20250514
+/status
+```
+
+Untuk 9Router yang berjalan dalam Docker network yang sama, gunakan Base URL yang dapat dijangkau container TeleChatBot, misalnya `http://9router:20128/v1` bila nama service/container-nya `9router`. Jangan gunakan `localhost` dari dalam container TeleChatBot karena itu menunjuk ke container TeleChatBot sendiri. 9Router sendiri mendokumentasikan endpoint lokal pada port 20128. citeturn0search0turn0search5
+
+**Catatan attachment:** kompatibilitas OpenAI Chat Completions membuat chat teks dapat langsung dirouting. Kemampuan vision/attachment tetap bergantung pada model/provider yang dipilih di 9Router; jangan mengaktifkan capability yang tidak benar-benar tersedia. Untuk audio/video, konfigurasi di atas memakai `fallback`, bukan mengklaim endpoint transcription native 9Router sebagai bagian dari adapter Chat Completions TeleChatBot.
+
+### 4. Enkripsi API key custom user
 
 Generate Fernet key:
 
