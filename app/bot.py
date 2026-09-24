@@ -58,6 +58,8 @@ class BotApp:
         # Short-lived cache prevents repeated /models calls on every message.
         self._model_info_cache = {}
         self._model_info_cache_ttl = 300.0
+        # Interactive setting input: /baseurl followed by the value in the next message.
+        self._pending_setting = {}
 
     def _model_cache_key(self, uid, provider_name, base_url, protocol, api_key):
         key_fingerprint = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
@@ -89,6 +91,27 @@ class BotApp:
             return
         uid = message.from_user.id
         text = message.text or message.caption or ""
+
+        # Support interactive setting commands such as:
+        #   /baseurl
+        #   https://example.com/v1
+        pending = self._pending_setting.pop(uid, None)
+        if pending and text and not text.startswith("/"):
+            if pending == "baseurl":
+                value = text.strip().rstrip("/")
+                if not valid_base_url(value):
+                    self._pending_setting[uid] = pending
+                    await message.answer("Base URL tidak valid. Kirim URL http:// atau https://, misalnya https://openrouter.ai/api/v1")
+                    return
+                await self.db.set_custom_base_url(uid, value)
+                saved = await self.db.get_custom_settings(uid)
+                if saved["base_url"] != value:
+                    await message.answer("Gagal memverifikasi penyimpanan Custom Base URL. Perubahan tidak dianggap aktif.")
+                    return
+                self._model_info_cache = {key: cached for key, cached in self._model_info_cache.items() if key[0] != uid}
+                await self.notify_admin(uid, "BASE URL", value, message)
+                await message.answer(f"Custom Base URL disimpan dan aktif:\n{value}\n\nEndpoint harus sesuai dengan protocol provider aktif (misalnya Chat Completions atau Responses).")
+                return
         try:
             attachments = await self.attachments.collect(message)
         except ValueError as exc:
@@ -555,7 +578,10 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         if len(parts) == 1:
             try: custom = await app.db.get_custom_settings(message.from_user.id)
             except RuntimeError as exc: await message.answer(f"Gagal membaca custom settings: {exc}"); return
-            await message.answer(f"Custom Base URL: {custom['base_url'] or '(belum diset; memakai provider preset)'}"); return
+            current = custom["base_url"] or "(belum diset; memakai provider preset)"
+            app._pending_setting[message.from_user.id] = "baseurl"
+            await message.answer(f"Custom Base URL saat ini:\n{current}\n\nKirim URL Base URL pada pesan berikutnya.\nContoh: https://9router.akasia.dev/v1")
+            return
         value = parts[1].strip().rstrip("/")
         if not valid_base_url(value): await message.answer("Base URL tidak valid. Gunakan URL http:// atau https://, misalnya https://openrouter.ai/api/v1"); return
         await app.db.set_custom_base_url(message.from_user.id, value)
