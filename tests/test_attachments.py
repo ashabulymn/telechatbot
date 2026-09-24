@@ -41,3 +41,21 @@ def test_attachment_adapter_applies_aggregate_text_budget(tmp_path):
     assert extracted.count("A") == 80
     assert extracted.count("B") == 20
     assert "aggregate prompt limit reached" in extracted
+
+
+def test_provider_native_upload_hook_defaults_to_unsupported(tmp_path):
+    from app.providers.base import AIProvider
+
+    class DummyProvider(AIProvider):
+        async def chat(self, messages, model=None):
+            raise NotImplementedError
+
+    item = Attachment(
+        kind="document",
+        file_id="file-1",
+        filename="note.txt",
+        mime_type="text/plain",
+        path=str(tmp_path / "note.txt"),
+    )
+    provider = DummyProvider()
+    assert provider.supports_native_upload(item) is False
