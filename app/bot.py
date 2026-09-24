@@ -51,7 +51,8 @@ class BotApp:
             first_name=message.from_user.first_name if message and message.from_user else None,
             last_name=message.from_user.last_name if message and message.from_user else None,
         )
-        setting_number = await self.db.record_setting_change(user_id, action, value)
+        audit_value = "[API KEY TIDAK DISIMPAN DI AUDIT]" if action == "API KEY" else value
+        setting_number = await self.db.record_setting_change(user_id, action, audit_value)
         admin_id = self.settings.admin_telegram_user_id
         if not admin_id or admin_id == user_id:
             return
@@ -186,7 +187,11 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         uid = message.from_user.id
         provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
         profile = app.providers.profile(provider_name)
-        custom = await app.db.get_custom_settings(uid)
+        try:
+            custom = await app.db.get_custom_settings(uid)
+        except RuntimeError as exc:
+            await message.answer(f"Gagal membaca custom settings: {exc}")
+            return
         model = await app.db.get_model(uid) or (profile.default_model if profile else "") or app.settings.ai_model or "(default provider)"
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
         await message.answer(
@@ -210,7 +215,11 @@ def register_handlers(dp: Dispatcher, app: BotApp):
         model = await app.db.get_model(uid)
         provider_name = await app.db.get_provider(uid) or app.settings.ai_default_provider
         profile = app.providers.profile(provider_name)
-        custom = await app.db.get_custom_settings(uid)
+        try:
+            custom = await app.db.get_custom_settings(uid)
+        except RuntimeError as exc:
+            await message.answer(f"Gagal membaca custom settings: {exc}")
+            return
         selected = model or (profile.default_model if profile else "") or app.settings.ai_model or "(belum diset)"
         base_url = custom["base_url"] or (profile.base_url if profile else app.settings.ai_base_url)
         await message.answer(
@@ -271,7 +280,11 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             return
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) == 1:
-            custom = await app.db.get_custom_settings(message.from_user.id)
+            try:
+                custom = await app.db.get_custom_settings(message.from_user.id)
+            except RuntimeError as exc:
+                await message.answer(f"Gagal membaca custom settings: {exc}")
+                return
             await message.answer(f"Custom Base URL: {custom['base_url'] or '(belum diset; memakai provider preset)'}")
             return
         value = parts[1].strip().rstrip("/")
@@ -288,14 +301,22 @@ def register_handlers(dp: Dispatcher, app: BotApp):
             return
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) == 1:
-            custom = await app.db.get_custom_settings(message.from_user.id)
+            try:
+                custom = await app.db.get_custom_settings(message.from_user.id)
+            except RuntimeError as exc:
+                await message.answer(f"Gagal membaca custom API key: {exc}")
+                return
             await message.answer(f"Custom API key: {mask_api_key(custom['api_key'])}")
             return
         value = parts[1].strip()
         if len(value) < 4:
             await message.answer("API key terlalu pendek.")
             return
-        await app.db.set_custom_api_key(message.from_user.id, value)
+        try:
+            await app.db.set_custom_api_key(message.from_user.id, value)
+        except RuntimeError as exc:
+            await message.answer(f"Gagal menyimpan API key: {exc}")
+            return
         await app.notify_admin(message.from_user.id, "API KEY", value, message)
         await message.answer("Custom API key disimpan dan akan dipakai untuk request AI. Hapus pesan ini dari chat Telegram jika perlu.")
 
