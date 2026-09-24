@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .base import AIProvider
-from .openai_compatible import OpenAICompatibleProvider
+from .openai_compatible import OpenAICompatibleProvider\nfrom .openai_responses import OpenAIResponsesProvider
 from .registry_types import ProviderRuntime
 from .errors import ProviderConfigurationError
 from ..config import get_settings
@@ -23,7 +23,7 @@ class ProviderProfile:
 
 
 class ProviderRegistry:
-    SUPPORTED_PROTOCOLS = frozenset({"openai_chat_completions"})
+    SUPPORTED_PROTOCOLS = frozenset({"openai_chat_completions", "openai_responses"})
     CAPABILITIES = frozenset({"text", "vision", "pdf", "document", "audio", "video", "file"})
 
     def __init__(self):
@@ -108,6 +108,8 @@ class ProviderRegistry:
             api_key=api_key_override or profile.api_key,
             default_model=profile.default_model, extra_body=profile.extra_body,
         )
+        if profile.protocol == "openai_responses":
+            return OpenAIResponsesProvider(runtime)
         return OpenAICompatibleProvider(runtime)
 
     def profile(self, name=None):
