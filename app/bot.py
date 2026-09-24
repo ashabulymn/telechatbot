@@ -122,6 +122,21 @@ class BotApp:
                         )
                     except Exception:
                         pass
+                async def attachment_progress(index, total, item, state):
+                    labels = {
+                        "preparing": "Menyiapkan",
+                        "uploading": "Mengirim",
+                        "fallback": "Fallback",
+                        "ready": "Siap",
+                        "failed": "Gagal",
+                    }
+                    label = labels.get(state, "Memproses")
+                    name = item.filename or item.kind
+                    try:
+                        await status.edit_text(f"📎 {label} {index}/{total}: {name}")
+                    except Exception:
+                        log.debug("Attachment progress edit skipped", exc_info=True)
+
                 transcriptions = []
                 remaining_attachments = []
                 for item in attachments:
@@ -147,10 +162,23 @@ class BotApp:
                         part for part in [text, *transcriptions] if part
                     )
                 mapping = await provider.prepare_attachments(
-                    remaining_attachments, prepared_text
+                    remaining_attachments,
+                    prepared_text,
+                    progress=attachment_progress,
                 )
                 content = mapping.parts or prepared_text
                 attachment_note = mapping.note
+                if mapping.warnings:
+                    warning_text = "\n".join(
+                        f"⚠️ {warning}" for warning in mapping.warnings[:5]
+                    )
+                    try:
+                        await status.edit_text(
+                            f"📎 Lampiran selesai dengan catatan:\n{warning_text}"
+                        )
+                    except Exception:
+                        log.debug("Attachment warning edit skipped", exc_info=True)
+
                 await self.db.add_message(uid, "user", text or attachment_note or "[attachment]")
                 history = await self.db.history(uid, self.settings.ai_max_history_messages)
                 if history:
@@ -164,6 +192,11 @@ class BotApp:
                 if not attachments:
                     try:
                         await status.edit_text("⏳ Memproses...")
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        await status.edit_text("⏳ Memproses AI...")
                     except Exception:
                         pass
                 full_text = ""
