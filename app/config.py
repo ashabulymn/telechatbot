@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ai_system_prompt: str = ""
 
     database_path: str = "/app/data/telechatbot.db"
+    custom_settings_encryption_key: str = ""
     attachment_max_mb: int = 20
     attachment_dir: str = "/app/data/attachments"
     attachment_max_prompt_chars: int = 30000
