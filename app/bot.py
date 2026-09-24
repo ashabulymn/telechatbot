@@ -96,21 +96,11 @@ class BotApp:
                 base_url = custom["base_url"] or profile.base_url
                 api_key = custom["api_key"] or profile.api_key
 
-                required = {"text"}
-                for item in attachments:
-                    if item.is_image:
-                        required.add("vision")
-                    elif item.mime_type == "application/pdf":
-                        required.add("pdf")
-                    elif item.mime_type and item.mime_type.startswith("audio/"):
-                        required.add("audio")
-                    elif item.mime_type and item.mime_type.startswith("video/"):
-                        required.add("video")
-                    elif item.mime_type:
-                        required.add("document")
-
-                missing = required - set(profile.capabilities)
-                if "vision" in missing:
+                # Images require a vision-capable provider because the fallback
+                # representation cannot turn pixels into useful text. Other files
+                # can fall back to bounded extraction/metadata when native support
+                # is unavailable.
+                if any(item.is_image for item in attachments) and "vision" not in profile.capabilities:
                     await message.answer(
                         "Provider ini belum mendukung gambar/vision. "
                         "Pilih provider lain dengan /provider."
