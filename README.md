@@ -51,7 +51,7 @@ Each Telegram user can override the active provider without changing server envi
 
 - `/settings` — show the active settings (API key is masked).
 - `/baseurl https://example.com/v1` — set a custom Base URL.
-- `/protocol openai_responses` — override the protocol used by the custom endpoint. Supported: `openai_chat_completions`, `openai_responses`.
+- `/protocol openai_responses` — override the protocol used by the custom endpoint. Supported: `openai_chat_completions`, `openai_responses`, `anthropic_messages`.
 - `/capabilities text,vision,file,transcription` — declare capabilities of the custom endpoint. This controls attachment behavior and prevents the bot from assuming the preset provider's capabilities.
 - `/apikey YOUR_KEY` — set a custom API key. The key is encrypted at rest when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured and is never displayed in full to the user.
 - `/model MODEL_NAME` — select the model for the current user.
