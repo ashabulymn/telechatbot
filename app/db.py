@@ -1,9 +1,38 @@
 import aiosqlite
 from pathlib import Path
+
+from cryptography.fernet import Fernet, InvalidToken
+
 from .config import get_settings
 
+
 class Database:
-    def __init__(self): self.path = get_settings().database_path
+    def __init__(self):
+        settings = get_settings()
+        self.path = settings.database_path
+        self._encryption_key = settings.custom_settings_encryption_key.strip()
+
+    def _encrypt_api_key(self, value):
+        if not value:
+            return None
+        if not self._encryption_key:
+            raise RuntimeError("CUSTOM_SETTINGS_ENCRYPTION_KEY belum dikonfigurasi.")
+        try:
+            return "enc:v1:" + Fernet(self._encryption_key.encode()).encrypt(value.encode()).decode()
+        except Exception as exc:
+            raise RuntimeError("CUSTOM_SETTINGS_ENCRYPTION_KEY tidak valid.") from exc
+
+    def _decrypt_api_key(self, value):
+        if not value:
+            return None
+        if not value.startswith("enc:v1:"):
+            return value
+        if not self._encryption_key:
+            raise RuntimeError("CUSTOM_SETTINGS_ENCRYPTION_KEY diperlukan untuk membaca API key terenkripsi.")
+        try:
+            return Fernet(self._encryption_key.encode()).decrypt(value[7:].encode()).decode()
+        except (InvalidToken, ValueError, TypeError) as exc:
+            raise RuntimeError("CUSTOM_SETTINGS_ENCRYPTION_KEY tidak cocok dengan data terenkripsi.") from exc
 
     async def init(self):
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
@@ -26,17 +55,13 @@ class Database:
     async def ensure_user(self, user_id, username=None, first_name=None, last_name=None):
         async with aiosqlite.connect(self.path) as db:
             await db.execute("BEGIN IMMEDIATE")
-            cur = await db.execute(
-                "SELECT user_number FROM users WHERE telegram_user_id=?",
-                (user_id,),
-            )
+            cur = await db.execute("SELECT user_number FROM users WHERE telegram_user_id=?", (user_id,))
             row = await cur.fetchone()
             if row:
                 user_number = row[0]
                 await db.execute(
                     """UPDATE users SET username=?, first_name=?, last_name=?,
-                       updated_at=CURRENT_TIMESTAMP
-                       WHERE telegram_user_id=?""",
+                       updated_at=CURRENT_TIMESTAMP WHERE telegram_user_id=?""",
                     (username, first_name, last_name, user_id),
                 )
             else:
@@ -105,9 +130,13 @@ class Database:
                 (user_id,),
             )
             row = await cur.fetchone()
+        encrypted = row[1] if row and row[1] else None
+        api_key = self._decrypt_api_key(encrypted)
+        if encrypted and api_key and not encrypted.startswith("enc:v1:") and self._encryption_key:
+            await self.set_custom_api_key(user_id, api_key)
         return {
             "base_url": row[0] if row and row[0] else None,
-            "api_key": row[1] if row and row[1] else None,
+            "api_key": api_key,
         }
 
     async def set_custom_base_url(self, user_id, base_url):
@@ -120,11 +149,12 @@ class Database:
             await db.commit()
 
     async def set_custom_api_key(self, user_id, api_key):
+        encrypted = self._encrypt_api_key(api_key)
         async with aiosqlite.connect(self.path) as db:
             await db.execute(
                 "INSERT INTO user_settings(telegram_user_id,custom_api_key) VALUES (?,?) "
                 "ON CONFLICT(telegram_user_id) DO UPDATE SET custom_api_key=excluded.custom_api_key,updated_at=CURRENT_TIMESTAMP",
-                (user_id, api_key),
+                (user_id, encrypted),
             )
             await db.commit()
 
