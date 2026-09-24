@@ -175,7 +175,7 @@ class BotApp:
                 disabled_routes = [route for route in routes if route.route == "disabled"]
                 if disabled_routes:
                     await message.answer(
-                        "Provider ini menonaktifkan lampiran: "
+                        "Lampiran berikut tidak dapat diproses dengan konfigurasi aktif: "
                         + ", ".join((r.attachment.filename or r.attachment.kind) for r in disabled_routes[:5])
                     )
                     return
