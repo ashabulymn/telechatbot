@@ -148,13 +148,14 @@ class GeminiProvider(AIProvider):
             actions = item.get("supportedGenerationMethods") or item.get("supportedActions") or []
             if name and (not actions or "generateContent" in actions):
                 caps = set()
+                capabilities_known = isinstance(item.get("capabilities"), dict)
                 raw = item.get("capabilities") or {}
                 if isinstance(raw, dict):
                     for key, value in raw.items():
                         key = str(key).lower()
                         if value is True and key in {"vision", "audio", "video", "file", "reasoning"}:
                             caps.add(key)
-                result.append(ModelInfo(id=name, capabilities=frozenset(caps), display_name=str(item.get("displayName") or "")))
+                result.append(ModelInfo(id=name, capabilities=frozenset(caps), capabilities_known=capabilities_known, display_name=str(item.get("displayName") or "")))
         return sorted({item.id: item for item in result}.values(), key=lambda item: item.id)
 
     async def chat(self, messages, model=None):
