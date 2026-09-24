@@ -55,7 +55,7 @@ Each Telegram user can override the active provider without changing server envi
 - `/capabilities text,vision,file,transcription` — declare capabilities of the custom endpoint. This controls attachment behavior and prevents the bot from assuming the preset provider's capabilities.
 - `/apikey YOUR_KEY` — set a custom API key. The key is encrypted at rest when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured and is never displayed in full to the user.
 - `/model MODEL_NAME` — select the model for the current user.
-- `/resetsettings` — remove the custom Base URL and API key while keeping provider/model selection.
+- `/resetsettings` — remove custom Base URL, API key, protocol, and capabilities while keeping provider/model selection.
 
 Existing legacy plaintext custom API keys remain readable for migration; once read while `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured, they are automatically re-encrypted. New custom API keys require the encryption key.
 
