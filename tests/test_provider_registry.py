@@ -5,6 +5,7 @@ import pytest
 from app.config import get_settings
 from app.providers.errors import ProviderConfigurationError
 from app.providers.openai_responses import OpenAIResponsesProvider
+from app.providers.anthropic import AnthropicMessagesProvider
 from app.providers.registry import ProviderRegistry
 from app.providers.registry_types import ProviderRuntime
 
@@ -174,3 +175,25 @@ def test_registry_provider_overrides_protocol_and_capabilities(monkeypatch):
     )
     assert isinstance(provider, OpenAIResponsesProvider)
     assert provider.runtime.capabilities == frozenset({"text", "file", "transcription"})
+
+
+def test_registry_supports_anthropic_messages(monkeypatch):
+    _reset_settings(monkeypatch)
+    monkeypatch.setenv(
+        "AI_PROVIDERS_JSON",
+        json.dumps(
+            {
+                "anthropic": {
+                    "protocol": "anthropic_messages",
+                    "base_url": "https://api.anthropic.com",
+                    "api_key": "key",
+                    "default_model": "claude-test",
+                    "capabilities": ["text", "vision"],
+                }
+            }
+        ),
+    )
+    registry = ProviderRegistry()
+    provider = registry.provider("anthropic")
+    assert isinstance(provider, AnthropicMessagesProvider)
+    assert provider._url() == "https://api.anthropic.com/v1/messages"
