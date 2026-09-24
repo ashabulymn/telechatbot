@@ -290,7 +290,7 @@ Each Telegram user can override the active provider without changing server envi
 - `/protocol openai_responses` — override the protocol used by the custom endpoint. Supported: `openai_chat_completions`, `openai_responses`, `anthropic_messages`, `gemini_generate_content`.
 - `/capabilities text,vision,file,transcription` — declare capabilities of the custom endpoint. This controls attachment behavior and prevents the bot from assuming the preset provider's capabilities.
 - `/apikey YOUR_KEY` — set a custom API key. The key is encrypted at rest when `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured and is never displayed in full to the user.
-- `/model MODEL_NAME` — select the model for the current user.
+- `/model MODEL_NAME` — select the model for the current user.\n- `/models` — query the active provider for its live model list when the provider exposes model discovery. OpenAI-compatible providers use `/models`; the Gemini native adapter uses Gemini's `models.list`; Anthropic uses its `/v1/models` endpoint.
 - `/resetsettings` — remove custom Base URL, API key, protocol, and capabilities while keeping provider/model selection.
 
 Existing legacy plaintext custom API keys remain readable for migration; once read while `CUSTOM_SETTINGS_ENCRYPTION_KEY` is configured, they are automatically re-encrypted. New custom API keys require the encryption key.
