@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..attachments import Attachment
-from .attachments import AttachmentMapping
+from .attachments import AttachmentMapping, ProgressCallback
 from .base import AIProvider, ModelInfo, ProviderResponse
 from .errors import ProviderConfigurationError, ProviderError
 from .registry_types import ProviderRuntime
@@ -198,5 +198,4 @@ class OpenAICompatibleProvider(AIProvider):
             f"Provider AI HTTP {response.status_code}" + (f": {detail}" if detail else ".")
         )
 
-    async def prepare_attachments(self, attachments: list[Attachment], text: str = "") -> AttachmentMapping:
-        return self.map_attachments(attachments, text)
+    async def prepare_attachments(\n        self,\n        attachments: list[Attachment],\n        text: str = "",\n        progress: ProgressCallback | None = None,\n    ) -> AttachmentMapping:\n        total = len(attachments)\n        if progress:\n            for index, item in enumerate(attachments, 1):\n                await progress(index, total, item, "preparing")\n        mapping = self.map_attachments(attachments, text)\n        if progress:\n            for index, item in enumerate(attachments, 1):\n                await progress(index, total, item, "ready")\n        return mapping
